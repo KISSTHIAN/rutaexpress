@@ -1,0 +1,54 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Ruta Express - Encomiendas y Viajes</title>
+    <link rel="stylesheet" href="/css/style.css">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+    <script src="https://accounts.google.com/gsi/client" async defer></script>
+</head>
+<body>
+    <div id="loader" class="loader-overlay">
+        <div class="loader-content">
+            <div class="loader-logo">🚀</div>
+            <div class="loader-spinner"></div>
+            <p class="loader-text">Cargando Ruta Express...</p>
+        </div>
+    </div>
+
+    <div id="toastContainer" class="toast-container"></div>
+
+    <div id="modalOverlay" class="modal-overlay">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3 id="modalTitle">Modal</h3>
+                <button class="modal-close" onclick="closeModal()"><i class="fas fa-times"></i></button>
+            </div>
+            <div id="modalBody" class="modal-body"></div>
+            <div id="modalFooter" class="modal-footer"></div>
+        </div>
+    </div>
+
+    <div id="paymentModalOverlay" class="modal-overlay">
+        <div class="modal-content payment-modal-content">
+            <div class="modal-header">
+                <h3 id="paymentModalTitle"><i class="fas fa-credit-card"></i> Realizar Pago</h3>
+                <button class="modal-close" onclick="closePaymentModal()"><i class="fas fa-times"></i></button>
+            </div>
+            <div id="paymentModalBody" class="modal-body"></div>
+        </div>
+    </div>
+
+    <div id="app"></div>
+
+<script src="/js/utils.js"></script>
+<script src="/js/auth.js"></script>
+<script src="/js/payments.js"></script>
+<script src="/js/userPanel.js"></script>
+<script src="/js/driverPanel.js"></script>
+<script src="/js/app.js"></script>
+</body>
+</html>
