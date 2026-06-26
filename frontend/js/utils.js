@@ -1,4 +1,4 @@
-const API_URL = 'https://rutaexpress-backend.vercel.app/api';
+const API_URL = 'https://rutaexpress-backendv2.vercel.app/';
 function getToken() { return localStorage.getItem('ruta_express_token'); }
 function setToken(token) { localStorage.setItem('ruta_express_token', token); }
 function removeToken() {
