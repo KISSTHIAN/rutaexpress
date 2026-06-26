@@ -31,6 +31,8 @@ const driverPaymentsRoutes = require('./routes/driverPayments');
 const orderRoutes = require('./routes/orders');
 const paymentRoutes = require('./routes/payments');
 const routeConfigRoutes = require('./routes/routeConfig');
+const notificationRoutes = require('./routes/notifications');
+const chatbotRoutes = require('./routes/chatbot');
 
 app.use('/api/auth', authRoutes);
 app.use('/api/drivers', driverRoutes);
@@ -38,6 +40,8 @@ app.use('/api/driver/payments', driverPaymentsRoutes);
 app.use('/api/orders', orderRoutes);
 app.use('/api/payments', paymentRoutes);
 app.use('/api/route-config', routeConfigRoutes);
+app.use('/api/notifications', notificationRoutes);
+app.use('/api/chatbot', chatbotRoutes);
 
 app.get('/', (req, res) => {
     res.json({ message: 'Ruta Express API funcionando 🚀' });

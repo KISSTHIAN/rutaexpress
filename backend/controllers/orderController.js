@@ -1,5 +1,6 @@
 const { supabase } = require('../models/init');
 const { subirImagen } = require('../utils/storage');
+const { crearNotificacion, notificarConductoresPedidoNuevo } = require('../utils/notifications');
 
 class OrderController {
     
@@ -72,10 +73,17 @@ class OrderController {
                 return res.status(500).json({ success: false, message: error.message });
             }
 
+            const nuevaEncomienda = data[0];
+
+            // Avisar al conductor de esa ruta que hay un pedido nuevo (no bloquea la respuesta)
+            if (rutaConfigId) {
+                notificarConductoresPedidoNuevo(rutaConfigId, 'encomienda', origenFinal, destinoFinal);
+            }
+
             res.status(201).json({ 
                 success: true, 
                 message: 'Encomienda creada exitosamente', 
-                data: { id: data[0]?.id } 
+                data: { id: nuevaEncomienda?.id } 
             });
         } catch (error) {
             res.status(500).json({ success: false, message: error.message });
@@ -266,6 +274,10 @@ class OrderController {
                 return res.status(500).json({ success: false, message: error.message });
             }
 
+            if (rutaConfigId) {
+                notificarConductoresPedidoNuevo(rutaConfigId, 'viaje', origenFinal, destinoFinal);
+            }
+
             res.status(201).json({ 
                 success: true, 
                 message: 'Viaje creado', 
@@ -450,7 +462,7 @@ class OrderController {
             // Verificar que existe y está en proceso
             const { data: existente, error: findError } = await supabase
                 .from('encomiendas')
-                .select('estado')
+                .select('estado, usuario_id, origen, destino')
                 .eq('id', req.params.id)
                 .single();
 
@@ -475,6 +487,14 @@ class OrderController {
                 return res.status(500).json({ success: false, message: error.message });
             }
 
+            crearNotificacion(
+                existente.usuario_id,
+                'pedido_culminado',
+                'Tu encomienda fue entregada',
+                `Tu encomienda de ${existente.origen} a ${existente.destino} fue marcada como culminada.`,
+                { tipo: 'encomienda', id: req.params.id }
+            );
+
             res.json({ success: true, message: 'Encomienda culminada exitosamente' });
         } catch (error) {
             res.status(500).json({ success: false, message: error.message });
@@ -486,7 +506,7 @@ class OrderController {
             // Verificar que existe y está en proceso
             const { data: existente, error: findError } = await supabase
                 .from('viajes')
-                .select('estado')
+                .select('estado, usuario_id, origen, destino')
                 .eq('id', req.params.id)
                 .single();
 
@@ -510,6 +530,14 @@ class OrderController {
             if (error) {
                 return res.status(500).json({ success: false, message: error.message });
             }
+
+            crearNotificacion(
+                existente.usuario_id,
+                'pedido_culminado',
+                'Tu viaje fue completado',
+                `Tu viaje de ${existente.origen} a ${existente.destino} fue marcado como culminado.`,
+                { tipo: 'viaje', id: req.params.id }
+            );
 
             res.json({ success: true, message: 'Viaje culminado exitosamente' });
         } catch (error) {

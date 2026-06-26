@@ -1,4 +1,4 @@
-const API_URL = 'https://rutaexpress-backendv2.vercel.app/api';
+const API_URL = 'https://rutaexpress-backend.vercel.app/api';
 function getToken() { return localStorage.getItem('ruta_express_token'); }
 function setToken(token) { localStorage.setItem('ruta_express_token', token); }
 function removeToken() {
@@ -222,3 +222,188 @@ function closeMobileSidebar() {
     if (sidebar) sidebar.classList.remove('mobile-open');
     if (overlay) overlay.classList.remove('active');
 }
+
+// ============ NOTIFICACIONES ============
+
+const Notifications = {
+    _intervalId: null,
+    _items: [],
+    _pollMs: 25000, // cada 25 segundos; el backend es serverless, no hay WebSockets
+
+    init() {
+        Notifications.fetchAndRender();
+        Notifications.stop(); // por si ya había un intervalo de una sesión anterior
+        Notifications._intervalId = setInterval(Notifications.fetchAndRender, Notifications._pollMs);
+        document.addEventListener('click', Notifications._handleOutsideClick);
+    },
+
+    stop() {
+        if (Notifications._intervalId) {
+            clearInterval(Notifications._intervalId);
+            Notifications._intervalId = null;
+        }
+    },
+
+    renderBell() {
+        return `
+        <div class="notif-wrapper">
+            <button class="notif-bell" onclick="Notifications.toggleDropdown(event)" aria-label="Notificaciones">
+                <i class="fas fa-bell"></i>
+                <span class="notif-badge" id="notifBadge" style="display:none">0</span>
+            </button>
+            <div class="notif-dropdown" id="notifDropdown">
+                <div class="notif-dropdown-header">
+                    <strong>Notificaciones</strong>
+                    <a href="#" onclick="Notifications.markAllRead(event)">Marcar todas leídas</a>
+                </div>
+                <div id="notifList"><div class="empty-state" style="padding:20px">Cargando...</div></div>
+            </div>
+        </div>`;
+    },
+
+    async fetchAndRender() {
+        try {
+            const res = await apiCall('/notifications');
+            Notifications._items = res.data || [];
+            Notifications._updateBadge(res.no_leidas || 0);
+            Notifications._renderList();
+        } catch (e) {
+            // Silencioso: si falla un poll no queremos llenar la pantalla de toasts
+        }
+    },
+
+    _updateBadge(count) {
+        const badge = document.getElementById('notifBadge');
+        if (!badge) return;
+        if (count > 0) {
+            badge.style.display = 'flex';
+            badge.textContent = count > 9 ? '9+' : count;
+        } else {
+            badge.style.display = 'none';
+        }
+    },
+
+    _renderList() {
+        const list = document.getElementById('notifList');
+        if (!list) return;
+        if (Notifications._items.length === 0) {
+            list.innerHTML = '<div class="empty-state" style="padding:20px">No tienes notificaciones</div>';
+            return;
+        }
+        list.innerHTML = Notifications._items.map(n => `
+            <div class="notif-item ${n.leido ? '' : 'unread'}" onclick="Notifications.markRead(${n.id})">
+                <div class="notif-item-icon ${n.tipo === 'pedido_culminado' ? 'icon-success' : 'icon-info'}">
+                    <i class="fas ${n.tipo === 'pedido_culminado' ? 'fa-check-circle' : 'fa-bell'}"></i>
+                </div>
+                <div class="notif-item-body">
+                    <strong>${n.titulo}</strong>
+                    <p>${n.mensaje}</p>
+                    <span class="notif-item-time">${formatDateShort(n.fecha_creacion)}</span>
+                </div>
+            </div>`).join('');
+    },
+
+    toggleDropdown(event) {
+        event.stopPropagation();
+        document.getElementById('notifDropdown').classList.toggle('open');
+    },
+
+    _handleOutsideClick(event) {
+        const dropdown = document.getElementById('notifDropdown');
+        const bell = document.querySelector('.notif-bell');
+        if (dropdown && dropdown.classList.contains('open') && !dropdown.contains(event.target) && event.target !== bell) {
+            dropdown.classList.remove('open');
+        }
+    },
+
+    async markRead(id) {
+        try {
+            await apiCall(`/notifications/${id}/read`, { method: 'PUT' });
+            Notifications.fetchAndRender();
+        } catch (e) {}
+    },
+
+    async markAllRead(event) {
+        event.preventDefault();
+        try {
+            await apiCall('/notifications/read-all', { method: 'PUT' });
+            Notifications.fetchAndRender();
+        } catch (e) {}
+    }
+};
+
+// ============ CHATBOT (preguntas frecuentes) ============
+
+const Chatbot = {
+    _open: false,
+    _history: [],
+
+    init() {
+        if (document.getElementById('chatbotWidget')) return; // ya está montado
+        const wrapper = document.createElement('div');
+        wrapper.id = 'chatbotWidget';
+        wrapper.innerHTML = `
+            <button class="chatbot-fab" onclick="Chatbot.toggle()" aria-label="Abrir chat de ayuda">
+                <i class="fas fa-comment-dots"></i>
+            </button>
+            <div class="chatbot-panel" id="chatbotPanel">
+                <div class="chatbot-header">
+                    <div><i class="fas fa-robot"></i> Asistente Ruta Express</div>
+                    <button onclick="Chatbot.toggle()" aria-label="Cerrar"><i class="fas fa-times"></i></button>
+                </div>
+                <div class="chatbot-messages" id="chatbotMessages">
+                    <div class="chatbot-msg bot">¡Hola! Puedo ayudarte con preguntas sobre encomiendas, viajes, pagos, tu cuenta o el estado de tus pedidos. ¿En qué te ayudo?</div>
+                </div>
+                <form class="chatbot-input-row" onsubmit="Chatbot.send(event)">
+                    <input type="text" id="chatbotInput" class="form-control" placeholder="Escribe tu pregunta..." autocomplete="off">
+                    <button type="submit" aria-label="Enviar"><i class="fas fa-paper-plane"></i></button>
+                </form>
+            </div>`;
+        document.body.appendChild(wrapper);
+    },
+
+    toggle() {
+        Chatbot._open = !Chatbot._open;
+        document.getElementById('chatbotPanel').classList.toggle('open', Chatbot._open);
+        if (Chatbot._open) setTimeout(() => document.getElementById('chatbotInput')?.focus(), 100);
+    },
+
+    async send(event) {
+        event.preventDefault();
+        const input = document.getElementById('chatbotInput');
+        const texto = input.value.trim();
+        if (!texto) return;
+
+        Chatbot._appendMessage(texto, 'user');
+        input.value = '';
+        Chatbot._appendMessage('...', 'bot', true);
+
+        try {
+            const res = await apiCall('/chatbot/message', { method: 'POST', body: { message: texto } });
+            Chatbot._replaceLastBotMessage(res.data.respuesta);
+        } catch (e) {
+            Chatbot._replaceLastBotMessage('Hubo un problema al responder. Intenta de nuevo en un momento.');
+        }
+    },
+
+    _appendMessage(text, who, isLoading = false) {
+        const container = document.getElementById('chatbotMessages');
+        const div = document.createElement('div');
+        div.className = `chatbot-msg ${who}${isLoading ? ' loading' : ''}`;
+        div.textContent = text;
+        container.appendChild(div);
+        container.scrollTop = container.scrollHeight;
+    },
+
+    _replaceLastBotMessage(text) {
+        const container = document.getElementById('chatbotMessages');
+        const loadingMsg = container.querySelector('.chatbot-msg.loading');
+        if (loadingMsg) {
+            loadingMsg.textContent = text;
+            loadingMsg.classList.remove('loading');
+        } else {
+            Chatbot._appendMessage(text, 'bot');
+        }
+        container.scrollTop = container.scrollHeight;
+    }
+};

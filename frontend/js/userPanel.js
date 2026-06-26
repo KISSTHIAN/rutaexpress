@@ -58,6 +58,7 @@ class UserPanel {
                     </button>
                     <h2 id="sectionTitle"><i class="fas fa-home"></i> Dashboard</h2>
                     <div class="top-bar-right">
+                        ${Notifications.renderBell()}
                         <div class="user-avatar">${(user.username||'U')[0].toUpperCase()}</div>
                         <span class="top-bar-username">${user.username || 'Usuario'}</span>
                     </div>
@@ -68,6 +69,7 @@ class UserPanel {
             </main>
         </div>`;
         setTimeout(UserPanel.loadDashboardStats, 200);
+        Notifications.init();
     }
 
     static showSection(section, event) {

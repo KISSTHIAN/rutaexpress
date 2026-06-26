@@ -41,4 +41,30 @@ function isDriver(req, res, next) {
     next();
 }
 
-module.exports = { authenticateToken, isUser, isDriver };
+// A diferencia de authenticateToken, este middleware NUNCA bloquea la
+// petición: si hay un token válido, llena req.user; si no hay token o
+// es inválido, deja req.user en null y continúa igual. Pensado para
+// endpoints como el chatbot, que deben funcionar también para visitantes
+// que todavía no iniciaron sesión.
+function optionalAuth(req, res, next) {
+    const authHeader = req.headers['authorization'];
+    const token = authHeader && authHeader.split(' ')[1];
+
+    if (!token) {
+        req.user = null;
+        return next();
+    }
+
+    jwt.verify(token, JWT_SECRET, (err, user) => {
+        if (err) {
+            req.user = null;
+        } else {
+            if (user.rol === 'conductor') user.role = 'driver';
+            if (user.role === 'driver') user.rol = 'conductor';
+            req.user = user;
+        }
+        next();
+    });
+}
+
+module.exports = { authenticateToken, isUser, isDriver, optionalAuth };

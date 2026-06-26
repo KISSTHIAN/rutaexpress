@@ -8,6 +8,7 @@ class App {
         } else {
             AuthViews.renderLogin();
         }
+        Chatbot.init();
     }
 
     static router() {
@@ -21,6 +22,7 @@ class App {
     }
 
     static logout() {
+        Notifications.stop();
         removeToken();
         showToast('Sesión cerrada correctamente 👋', 'info');
         setTimeout(() => AuthViews.renderLogin(), 500);

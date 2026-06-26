@@ -32,12 +32,16 @@ class DriverPanel {
                 <div class="top-bar">
                     <button class="mobile-menu-btn" onclick="openMobileSidebar()" aria-label="Abrir menú"><i class="fas fa-bars"></i></button>
                     <h2 id="sectionTitle">Dashboard</h2>
-                    <div class="availability-toggle" id="availabilityWidget"><label class="toggle-switch"><input type="checkbox" id="availabilityToggle" onchange="DriverPanel.toggleAvailability()"><span class="toggle-slider"></span></label><span id="availabilityLabel">No disponible</span></div>
+                    <div class="top-bar-right">
+                        ${Notifications.renderBell()}
+                        <div class="availability-toggle" id="availabilityWidget"><label class="toggle-switch"><input type="checkbox" id="availabilityToggle" onchange="DriverPanel.toggleAvailability()"><span class="toggle-slider"></span></label><span id="availabilityLabel">No disponible</span></div>
+                    </div>
                 </div>
                 <div class="section-content-wrapper"><div id="sectionContent">${DriverPanel.getDashboardHTML()}</div></div>
             </main>
         </div>`;
         setTimeout(DriverPanel.loadAvailability, 200);
+        Notifications.init();
         setTimeout(DriverPanel.loadDashboardStats, 300);
     }
 
