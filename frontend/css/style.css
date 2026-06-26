@@ -643,9 +643,3 @@ tbody tr:hover { background: var(--primary-50); }
     .stats-grid { grid-template-columns: 1fr; }
     .auth-form-wrapper { padding: 24px 18px; }
 }
-
-.loader-logo {width: 10cm;height: 10cm;min-width: 10cm;max-width: 10cm;min-height: 10cm;max-height: 10cm;
-    margin: 0 auto 20px auto;display: flex;justify-content: center;align-items: center;overflow: hidden;flex-shrink: 0;}
-
-.loader-image {width: 10cm;height: 10cm;min-width: 10cm;max-width: 10cm;min-height: 10cm;max-height: 10cm;
-    object-fit: contain;object-position: center;display: block;flex-shrink: 0;}
