@@ -2,7 +2,6 @@ const { supabase } = require('../models/init');
 
 class RouteConfigController {
     
-    
     static async obtenerHorarios(req, res) {
         try {
             const { data, error } = await supabase
@@ -28,7 +27,6 @@ class RouteConfigController {
                 return res.status(400).json({ success: false, message: 'La hora de salida es obligatoria' });
             }
 
-            // Verificar límite de 4 horarios
             const { count, error: countError } = await supabase
                 .from('horarios_salida')
                 .select('id', { count: 'exact', head: true })
@@ -98,8 +96,6 @@ class RouteConfigController {
         }
     }
 
-    // ============ RUTAS ============
-    
     static async obtenerRutas(req, res) {
         try {
             const { data, error } = await supabase
@@ -121,10 +117,6 @@ class RouteConfigController {
 
     static async obtenerRutasDisponibles(req, res) {
         try {
-            // NOTA: Supabase no soporta .eq('tabla_relacionada.columna', valor)
-            // como filtro real en joins. La solución correcta es traer todo
-            // con !inner (que ya excluye rutas sin conductor asociado) y
-            // filtrar disponible/estado del conductor en JavaScript después.
             const { data, error } = await supabase
                 .from('configuracion_rutas')
                 .select(`
@@ -153,7 +145,6 @@ class RouteConfigController {
                 return res.status(500).json({ success: false, message: error.message });
             }
 
-            // Filtrar en JS: solo conductores activos Y disponibles
             const rutasFiltradas = (data || []).filter(r =>
                 r.conductores &&
                 r.conductores.disponible === 1 &&
@@ -162,7 +153,6 @@ class RouteConfigController {
 
             const conductorIds = [...new Set(rutasFiltradas.map(r => r.conductores?.id).filter(Boolean))];
 
-            // Horarios de cada conductor (una sola consulta para todos)
             let horariosPorConductor = {};
             if (conductorIds.length > 0) {
                 const { data: horarios, error: horError } = await supabase
@@ -180,9 +170,6 @@ class RouteConfigController {
                 }
             }
 
-            // Asientos ya ocupados por ruta: suma de cantidad_pasajeros de
-            // viajes "en_proceso" que pertenecen a cada configuracion_ruta.
-            // Esto es lo que permite calcular "vehículo lleno" en tiempo real.
             const rutaIds = rutasFiltradas.map(r => r.id);
             let ocupadosPorRuta = {};
             if (rutaIds.length > 0) {
@@ -201,7 +188,6 @@ class RouteConfigController {
                 }
             }
 
-            // Rating promedio por conductor (una sola consulta para todos)
             let ratingPorConductor = {};
             if (conductorIds.length > 0) {
                 const { data: calificaciones, error: califError } = await supabase
@@ -247,11 +233,75 @@ class RouteConfigController {
                     vehiculo_lleno: disponibles !== null && disponibles <= 0,
                     rating_promedio: rating.promedio,
                     rating_total: rating.total,
-                    horarios: horariosPorConductor[r.conductores?.id] || []
+                    horarios: horariosPorConductor[r.conductores?.id] || [],
+                    sin_ruta: false
                 };
             });
 
-            res.json({ success: true, data: rutasFormateadas });
+            const { data: todosConductores, error: condError } = await supabase
+                .from('conductores')
+                .select('id, nombre_completo, telefono_1, whatsapp, disponible, estado')
+                .eq('disponible', 1)
+                .eq('estado', 'activo');
+
+            let conductoresFormateados = [];
+            if (!condError && todosConductores) {
+                const conductoresConRuta = new Set(conductorIds.map(String));
+                const sinRuta = todosConductores.filter(c => !conductoresConRuta.has(String(c.id)));
+
+                if (sinRuta.length > 0) {
+                    const idsSinRuta = sinRuta.map(c => c.id);
+
+                    const { data: vehiculosSinRuta } = await supabase
+                        .from('vehiculos')
+                        .select('conductor_id, placa, marca, modelo, color, capacidad, foto_vehiculo')
+                        .in('conductor_id', idsSinRuta);
+
+                    const vehiculoPorConductor = {};
+                    (vehiculosSinRuta || []).forEach(v => { vehiculoPorConductor[v.conductor_id] = v; });
+
+                    const { data: calificacionesSinRuta } = await supabase
+                        .from('calificaciones')
+                        .select('conductor_id, estrellas')
+                        .in('conductor_id', idsSinRuta);
+
+                    const ratingSinRuta = {};
+                    (calificacionesSinRuta || []).forEach(c => {
+                        if (!ratingSinRuta[c.conductor_id]) ratingSinRuta[c.conductor_id] = { suma: 0, total: 0 };
+                        ratingSinRuta[c.conductor_id].suma += c.estrellas;
+                        ratingSinRuta[c.conductor_id].total += 1;
+                    });
+
+                    conductoresFormateados = sinRuta.map(c => {
+                        const v = vehiculoPorConductor[c.id] || {};
+                        const r = ratingSinRuta[c.id];
+                        return {
+                            id: null,
+                            conductor_id: c.id,
+                            origen: null,
+                            destino: null,
+                            nombre_completo: c.nombre_completo,
+                            telefono_1: c.telefono_1,
+                            whatsapp: c.whatsapp || c.telefono_1,
+                            placa: v.placa || null,
+                            marca: v.marca || null,
+                            modelo: v.modelo || null,
+                            color_vehiculo: v.color || null,
+                            foto_vehiculo: v.foto_vehiculo || null,
+                            capacidad_vehiculo: v.capacidad ? parseInt(v.capacidad, 10) : null,
+                            asientos_ocupados: 0,
+                            asientos_disponibles: v.capacidad ? parseInt(v.capacidad, 10) : null,
+                            vehiculo_lleno: false,
+                            rating_promedio: r ? Math.round((r.suma / r.total) * 10) / 10 : 0,
+                            rating_total: r ? r.total : 0,
+                            horarios: [],
+                            sin_ruta: true
+                        };
+                    });
+                }
+            }
+
+            res.json({ success: true, data: [...rutasFormateadas, ...conductoresFormateados] });
         } catch (error) {
             res.status(500).json({ success: false, message: error.message });
         }
@@ -267,7 +317,6 @@ class RouteConfigController {
                 });
             }
 
-            // Verificar límite de 8 rutas
             const { count, error: countError } = await supabase
                 .from('configuracion_rutas')
                 .select('id', { count: 'exact', head: true })
