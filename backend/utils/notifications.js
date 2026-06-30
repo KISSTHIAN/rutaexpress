@@ -1,18 +1,4 @@
 const { supabase } = require('../models/init');
-
-/**
- * Crea una notificación para un usuario. Se usa "fire and forget":
- * si falla, se registra en consola pero NUNCA debe interrumpir el
- * flujo principal (crear un pedido o culminarlo es más importante
- * que poder avisarlo). Por eso esta función no lanza errores hacia
- * arriba, los atrapa internamente.
- *
- * @param {number} usuarioId - a quién va dirigida
- * @param {string} tipo - 'pedido_culminado' | 'pedido_disponible' | 'cuenta'
- * @param {string} titulo
- * @param {string} mensaje
- * @param {{tipo: string, id: number}} [referencia] - opcional, para enlazar al pedido
- */
 async function crearNotificacion(usuarioId, tipo, titulo, mensaje, referencia = null) {
     try {
         if (!usuarioId) return;
@@ -29,11 +15,6 @@ async function crearNotificacion(usuarioId, tipo, titulo, mensaje, referencia = 
     }
 }
 
-/**
- * Notifica a todos los conductores cuyas rutas (configuracion_rutas)
- * coinciden con ruta_config_id de que apareció un pedido nuevo.
- * Se llama justo después de crear una encomienda o viaje con ruta elegida.
- */
 async function notificarConductoresPedidoNuevo(rutaConfigId, tipoPedido, origen, destino) {
     try {
         if (!rutaConfigId) return;
@@ -58,4 +39,28 @@ async function notificarConductoresPedidoNuevo(rutaConfigId, tipoPedido, origen,
     }
 }
 
-module.exports = { crearNotificacion, notificarConductoresPedidoNuevo };
+async function notificarConductorDirecto(conductorId, tipoPedido, origen, destino, pedidoId) {
+    try {
+        if (!conductorId) return;
+
+        const { data: conductor, error } = await supabase
+            .from('conductores')
+            .select('usuario_id')
+            .eq('id', conductorId)
+            .single();
+
+        if (error || !conductor?.usuario_id) return;
+
+        await crearNotificacion(
+            conductor.usuario_id,
+            'pedido_disponible',
+            tipoPedido === 'encomienda' ? 'Nueva encomienda asignada' : 'Nuevo viaje asignado',
+            `Un cliente te eligió directamente para un pedido de ${origen} a ${destino}.`,
+            { tipo: tipoPedido, id: pedidoId || null }
+        );
+    } catch (error) {
+        console.error('⚠️ No se pudo notificar al conductor (no crítico):', error.message);
+    }
+}
+
+module.exports = { crearNotificacion, notificarConductoresPedidoNuevo, notificarConductorDirecto };
