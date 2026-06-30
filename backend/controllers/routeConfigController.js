@@ -121,6 +121,10 @@ class RouteConfigController {
 
     static async obtenerRutasDisponibles(req, res) {
         try {
+            // NOTA: Supabase no soporta .eq('tabla_relacionada.columna', valor)
+            // como filtro real en joins. La solución correcta es traer todo
+            // con !inner (que ya excluye rutas sin conductor asociado) y
+            // filtrar disponible/estado del conductor en JavaScript después.
             const { data, error } = await supabase
                 .from('configuracion_rutas')
                 .select(`
@@ -143,16 +147,20 @@ class RouteConfigController {
                     )
                 `)
                 .eq('estado', 'activo')
-                .eq('conductores.disponible', 1)
-                .eq('conductores.estado', 'activo')
                 .order('fecha_creacion', { ascending: false });
 
             if (error) {
                 return res.status(500).json({ success: false, message: error.message });
             }
 
-            const rutas = data || [];
-            const conductorIds = [...new Set(rutas.map(r => r.conductores?.id).filter(Boolean))];
+            // Filtrar en JS: solo conductores activos Y disponibles
+            const rutasFiltradas = (data || []).filter(r =>
+                r.conductores &&
+                r.conductores.disponible === 1 &&
+                r.conductores.estado === 'activo'
+            );
+
+            const conductorIds = [...new Set(rutasFiltradas.map(r => r.conductores?.id).filter(Boolean))];
 
             // Horarios de cada conductor (una sola consulta para todos)
             let horariosPorConductor = {};
@@ -175,7 +183,7 @@ class RouteConfigController {
             // Asientos ya ocupados por ruta: suma de cantidad_pasajeros de
             // viajes "en_proceso" que pertenecen a cada configuracion_ruta.
             // Esto es lo que permite calcular "vehículo lleno" en tiempo real.
-            const rutaIds = rutas.map(r => r.id);
+            const rutaIds = rutasFiltradas.map(r => r.id);
             let ocupadosPorRuta = {};
             if (rutaIds.length > 0) {
                 const { data: viajesActivos, error: viajesError } = await supabase
@@ -217,9 +225,7 @@ class RouteConfigController {
                 }
             }
 
-            // Formatear respuesta con todo lo necesario para mostrar
-            // tarjetas de conductor y calcular "vehículo lleno"
-            const rutasFormateadas = rutas.map(r => {
+            const rutasFormateadas = rutasFiltradas.map(r => {
                 const capacidad = r.vehiculos?.[0]?.capacidad ? parseInt(r.vehiculos[0].capacidad, 10) : null;
                 const ocupados = ocupadosPorRuta[r.id] || 0;
                 const disponibles = capacidad !== null ? Math.max(0, capacidad - ocupados) : null;
