@@ -6,7 +6,6 @@ const upload = require('../middleware/upload');
 const { subirImagen } = require('../utils/storage');
 const { requireActiveSubscription, calcularEstadoReal, obtenerOCrearSuscripcion } = require('../middleware/subscription');
 
-// Perfil conductor
 router.get('/profile', authenticateToken, isDriver, async (req, res) => {
     try {
         const { data, error } = await supabase
@@ -85,10 +84,8 @@ router.put('/availability', authenticateToken, isDriver, async (req, res) => {
     }
 });
 
-// Vehículos
 router.get('/vehicles', authenticateToken, isDriver, async (req, res) => {
     try {
-        // Obtener conductor_id
         const { data: conductor, error: condError } = await supabase
             .from('conductores')
             .select('id')
@@ -116,7 +113,6 @@ router.get('/vehicles', authenticateToken, isDriver, async (req, res) => {
 
 router.post('/vehicles', authenticateToken, isDriver, upload.single('photo'), async (req, res) => {
     try {
-        // Obtener conductor_id
         const { data: conductor, error: condError } = await supabase
             .from('conductores')
             .select('id')
@@ -132,20 +128,24 @@ router.post('/vehicles', authenticateToken, isDriver, upload.single('photo'), as
             try {
                 fotoUrl = await subirImagen(req.file, 'vehiculos', String(conductor.id));
             } catch (uploadErr) {
-                return res.status(500).json({ success: false, message: uploadErr.message });
+                console.warn('⚠️ No se pudo subir foto del vehículo (se guarda sin foto):', uploadErr.message);
             }
         }
 
         const { plate, brand, model, color, capacity } = req.body;
+        if (!plate || !capacity) {
+            return res.status(400).json({ success: false, message: 'Placa y capacidad son obligatorias' });
+        }
+
         const { data, error } = await supabase
             .from('vehiculos')
             .insert([{
                 conductor_id: conductor.id,
                 placa: plate,
-                marca: brand,
-                modelo: model,
-                color: color,
-                capacidad: capacity,
+                marca: brand || null,
+                modelo: model || null,
+                color: color || null,
+                capacidad: parseInt(capacity, 10),
                 foto_vehiculo: fotoUrl
             }])
             .select();
@@ -183,7 +183,7 @@ router.put('/vehicles/:id', authenticateToken, isDriver, upload.single('photo'),
             try {
                 updates.foto_vehiculo = await subirImagen(req.file, 'vehiculos', String(conductor.id));
             } catch (uploadErr) {
-                return res.status(500).json({ success: false, message: uploadErr.message });
+                console.warn('⚠️ No se pudo subir foto del vehículo (se actualiza sin cambiar foto):', uploadErr.message);
             }
         }
 
