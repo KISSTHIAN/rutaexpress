@@ -30,9 +30,6 @@ class UserPanel {
                         <i class="fas fa-tasks"></i> <span>Mis Pedidos</span>
                     </a>
                     <div class="sidebar-section-label">Cuenta</div>
-                    <a href="#" onclick="UserPanel.showSection('subscription',event)" data-section="subscription">
-                        <i class="fas fa-id-card"></i> <span>Suscripción</span>
-                    </a>
                     <a href="#" onclick="UserPanel.showSection('settings',event)" data-section="settings">
                         <i class="fas fa-cog"></i> <span>Ajustes</span>
                     </a>
@@ -77,14 +74,14 @@ class UserPanel {
             event.target.closest('a').classList.add('active');
         }
         closeMobileSidebar();
-        const titles = { dashboard:'Dashboard', profile:'Mi Perfil', parcels:'Encomiendas', trips:'Viajes', status:'Mis Pedidos', subscription:'Suscripción', settings:'Ajustes' };
-        const icons  = { dashboard:'fa-home', profile:'fa-user-circle', parcels:'fa-box', trips:'fa-route', status:'fa-tasks', subscription:'fa-id-card', settings:'fa-cog' };
+        const titles = { dashboard:'Dashboard', profile:'Mi Perfil', parcels:'Encomiendas', trips:'Viajes', status:'Mis Pedidos', settings:'Ajustes' };
+        const icons  = { dashboard:'fa-home', profile:'fa-user-circle', parcels:'fa-box', trips:'fa-route', status:'fa-tasks', settings:'fa-cog' };
         document.getElementById('sectionTitle').innerHTML = `<i class="fas ${icons[section]||'fa-circle'}"></i> ${titles[section]||section}`;
 
-        const methods = { dashboard:UserPanel.getDashboardHTML, profile:UserPanel.getProfileHTML, parcels:UserPanel.getParcelsHTML, trips:UserPanel.getTripsHTML, status:UserPanel.getStatusHTML, subscription:()=>'<div class="empty-state">Cargando...</div>', settings:UserPanel.getSettingsHTML };
+        const methods = { dashboard:UserPanel.getDashboardHTML, profile:UserPanel.getProfileHTML, parcels:UserPanel.getParcelsHTML, trips:UserPanel.getTripsHTML, status:UserPanel.getStatusHTML, settings:UserPanel.getSettingsHTML };
         document.getElementById('sectionContent').innerHTML = (methods[section]||(() => ''))();
 
-        const asyncLoads = { dashboard:UserPanel.loadDashboardStats, profile:UserPanel.loadProfile, parcels:UserPanel.loadParcels, trips:UserPanel.loadTrips, status:UserPanel.loadStatus, subscription:UserPanel.loadSubscription, settings:UserPanel.loadSettings };
+        const asyncLoads = { dashboard:UserPanel.loadDashboardStats, profile:UserPanel.loadProfile, parcels:UserPanel.loadParcels, trips:UserPanel.loadTrips, status:UserPanel.loadStatus, settings:UserPanel.loadSettings };
         if (asyncLoads[section]) setTimeout(asyncLoads[section], 200);
     }
 
@@ -92,7 +89,6 @@ class UserPanel {
 
     static getDashboardHTML() {
         return `
-        <div id="subscriptionBanner"></div>
         <div class="stats-grid">
             <div class="stat-card"><div class="stat-icon" style="background:#dbeafe;color:#2563eb"><i class="fas fa-box"></i></div><div class="stat-info"><div class="stat-value" id="statParcels">—</div><div class="stat-label">Encomiendas</div></div></div>
             <div class="stat-card"><div class="stat-icon" style="background:#d1fae5;color:#10b981"><i class="fas fa-check-circle"></i></div><div class="stat-info"><div class="stat-value" id="statCompleted">—</div><div class="stat-label">Culminados</div></div></div>
@@ -117,11 +113,6 @@ class UserPanel {
 
     static async loadDashboardStats() {
         try {
-            // Banner de suscripción
-            const sub = await Subscription.obtenerEstado();
-            const banner = document.getElementById('subscriptionBanner');
-            if (banner) banner.innerHTML = Subscription.renderBanner(sub);
-
             const [parcels, trips] = await Promise.all([
                 apiCall('/orders/parcels').catch(()=>({data:[]})),
                 apiCall('/orders/trips').catch(()=>({data:[]}))
@@ -359,7 +350,6 @@ class UserPanel {
             });
         } catch(e) {
             hideLoader();
-            if (Subscription.handleBlockedError(e)) return;
             showToast(e.message||'Error al crear encomienda','error');
         }
     }
@@ -569,7 +559,6 @@ class UserPanel {
             });
         } catch(e) {
             hideLoader();
-            if (Subscription.handleBlockedError(e)) return;
             showToast(e.message||'Error al crear viaje','error');
         }
     }
@@ -719,13 +708,6 @@ class UserPanel {
                 }).join('')}
             </div>`;
         } catch(e) { content.innerHTML = '<div class="empty-state">Error al cargar</div>'; }
-    }
-
-    // ============ SUSCRIPCIÓN ============
-
-    static async loadSubscription() {
-        const content = document.getElementById('sectionContent');
-        content.innerHTML = await Subscription.renderSectionHTML();
     }
 
     // ============ AJUSTES ============
