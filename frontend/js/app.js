@@ -1,6 +1,6 @@
 class App {
     static init() {
-        console.log('🚀 Iniciando Ruta Express...');
+        console.log('Iniciando Ruta Express...');
         const user = getUser();
         const token = getToken();
         if (user && token) {
@@ -22,7 +22,8 @@ class App {
     }
 
     static logout() {
-        Notifications.stop();
+
+        try { Notifications.stop(); } catch (e) { console.warn('Notifications.stop() falló:', e); }
         removeToken();
         showToast('Sesión cerrada correctamente 👋', 'info');
         setTimeout(() => AuthViews.renderLogin(), 500);
