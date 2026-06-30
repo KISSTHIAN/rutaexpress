@@ -1,17 +1,15 @@
 const { supabase } = require('../models/init');
 const { subirImagen } = require('../utils/storage');
-const { crearNotificacion, notificarConductoresPedidoNuevo } = require('../utils/notifications');
+const { crearNotificacion, notificarConductoresPedidoNuevo, notificarConductorDirecto } = require('../utils/notifications');
 
 class OrderController {
-    
-    // ============ ENCOMIENDAS ============
     
     static async crearEncomienda(req, res) {
         try {
             const {
                 description, origin, origin_reference, origin_lat, origin_lng,
                 destination, destination_reference, destination_lat, destination_lng,
-                receiver_name, receiver_contact, route_id, schedule_id
+                receiver_name, receiver_contact, route_id, schedule_id, conductor_id
             } = req.body;
 
             let rutaImagen = null;
@@ -30,9 +28,9 @@ class OrderController {
             let origenFinal = origin;
             let destinoFinal = destination;
             let rutaConfigId = null;
-            let conductorContacto = null; // { nombre, whatsapp } para que el frontend arme el link de WhatsApp
+            let conductorAsignadoId = null;
+            let conductorContacto = null; 
 
-            // Si el usuario eligió una ruta de un conductor, usar origen/destino de esa ruta
             if (route_id) {
                 const { data: ruta, error: rutaError } = await supabase
                     .from('configuracion_rutas')
@@ -52,6 +50,25 @@ class OrderController {
                     nombre: ruta.conductores?.nombre_completo || null,
                     whatsapp: ruta.conductores?.whatsapp || ruta.conductores?.telefono_1 || null
                 };
+            } else if (conductor_id) {
+
+                const { data: conductor, error: conductorError } = await supabase
+                    .from('conductores')
+                    .select('id, usuario_id, nombre_completo, telefono_1, whatsapp, disponible, estado')
+                    .eq('id', conductor_id)
+                    .eq('disponible', 1)
+                    .eq('estado', 'activo')
+                    .single();
+
+                if (conductorError || !conductor) {
+                    return res.status(400).json({ success: false, message: 'El conductor elegido ya no está disponible' });
+                }
+
+                conductorAsignadoId = conductor.id;
+                conductorContacto = {
+                    nombre: conductor.nombre_completo || null,
+                    whatsapp: conductor.whatsapp || conductor.telefono_1 || null
+                };
             }
 
             if (!origenFinal || !destinoFinal) {
@@ -64,6 +81,7 @@ class OrderController {
                     { 
                         usuario_id: req.user.id,
                         ruta_config_id: rutaConfigId,
+                        conductor_id: conductorAsignadoId,
                         ruta_imagen: rutaImagen,
                         descripcion: description,
                         origen: origenFinal,
@@ -88,9 +106,10 @@ class OrderController {
 
             const nuevaEncomienda = data[0];
 
-            // Avisar al conductor de esa ruta que hay un pedido nuevo (no bloquea la respuesta)
             if (rutaConfigId) {
                 notificarConductoresPedidoNuevo(rutaConfigId, 'encomienda', origenFinal, destinoFinal);
+            } else if (conductorAsignadoId) {
+                notificarConductorDirecto(conductorAsignadoId, 'encomienda', origenFinal, destinoFinal, nuevaEncomienda?.id);
             }
 
             res.status(201).json({ 
@@ -162,7 +181,7 @@ class OrderController {
 
     static async actualizarEncomienda(req, res) {
         try {
-            // Verificar si existe y está en proceso
+
             const { data: existente, error: findError } = await supabase
                 .from('encomiendas')
                 .select('estado')
@@ -202,7 +221,7 @@ class OrderController {
 
     static async eliminarEncomienda(req, res) {
         try {
-            // Verificar si existe y está en proceso sin conductor asignado
+
             const { data: existente, error: findError } = await supabase
                 .from('encomiendas')
                 .select('estado, conductor_id')
@@ -232,14 +251,12 @@ class OrderController {
             res.status(500).json({ success: false, message: error.message });
         }
     }
-
-    // ============ VIAJES ============
     
     static async crearViaje(req, res) {
         try {
             const {
                 origin, destination, departure_time, passenger_count, notes,
-                route_id, schedule_id,
+                route_id, schedule_id, conductor_id,
                 origin_lat, origin_lng, destination_lat, destination_lng
             } = req.body;
 
@@ -247,6 +264,7 @@ class OrderController {
             let destinoFinal = destination;
             let horaFinal = departure_time;
             let rutaConfigId = null;
+            let conductorAsignadoId = null;
             let conductorContacto = null;
             const cantidadSolicitada = parseInt(passenger_count, 10) || 1;
 
@@ -262,8 +280,6 @@ class OrderController {
                     return res.status(400).json({ success: false, message: 'La ruta seleccionada ya no está disponible' });
                 }
 
-                // Verificar cupo disponible: capacidad del vehículo menos los
-                // asientos ya ocupados por viajes en_proceso de esta misma ruta.
                 const capacidad = ruta.vehiculos?.[0]?.capacidad ? parseInt(ruta.vehiculos[0].capacidad, 10) : null;
                 if (capacidad !== null) {
                     const { data: viajesActivos, error: viajesError } = await supabase
@@ -294,8 +310,7 @@ class OrderController {
                     nombre: ruta.conductores?.nombre_completo || null,
                     whatsapp: ruta.conductores?.whatsapp || ruta.conductores?.telefono_1 || null
                 };
-
-                // Si además eligió un horario específico del conductor, usar esa hora
+                
                 if (schedule_id) {
                     const { data: horario } = await supabase
                         .from('horarios_salida')
@@ -305,6 +320,25 @@ class OrderController {
                         .single();
                     if (horario) horaFinal = horario.hora_salida;
                 }
+            } else if (conductor_id) {
+       
+                const { data: conductor, error: conductorError } = await supabase
+                    .from('conductores')
+                    .select('id, usuario_id, nombre_completo, telefono_1, whatsapp, disponible, estado')
+                    .eq('id', conductor_id)
+                    .eq('disponible', 1)
+                    .eq('estado', 'activo')
+                    .single();
+
+                if (conductorError || !conductor) {
+                    return res.status(400).json({ success: false, message: 'El conductor elegido ya no está disponible' });
+                }
+
+                conductorAsignadoId = conductor.id;
+                conductorContacto = {
+                    nombre: conductor.nombre_completo || null,
+                    whatsapp: conductor.whatsapp || conductor.telefono_1 || null
+                };
             }
 
             if (!origenFinal || !destinoFinal || !horaFinal) {
@@ -317,6 +351,7 @@ class OrderController {
                     { 
                         usuario_id: req.user.id,
                         ruta_config_id: rutaConfigId,
+                        conductor_id: conductorAsignadoId,
                         origen: origenFinal,
                         origen_lat: origin_lat || null,
                         origen_lng: origin_lng || null,
@@ -337,6 +372,8 @@ class OrderController {
 
             if (rutaConfigId) {
                 notificarConductoresPedidoNuevo(rutaConfigId, 'viaje', origenFinal, destinoFinal);
+            } else if (conductorAsignadoId) {
+                notificarConductorDirecto(conductorAsignadoId, 'viaje', origenFinal, destinoFinal, data[0]?.id);
             }
 
             res.status(201).json({ 
@@ -459,12 +496,9 @@ class OrderController {
             res.status(500).json({ success: false, message: error.message });
         }
     }
-
-    // ============ CONDUCTOR ============
     
     static async obtenerPedidosConductor(req, res) {
         try {
-            // Obtener las rutas del conductor
             const { data: rutas, error: rutasError } = await supabase
                 .from('configuracion_rutas')
                 .select('id')
@@ -476,31 +510,29 @@ class OrderController {
 
             const rutaIds = rutas?.map(r => r.id) || [];
 
-            if (rutaIds.length === 0) {
-                return res.json({ success: true, data: { encomiendas: [], viajes: [] } });
-            }
-
-            // Obtener encomiendas que coinciden con las rutas del conductor
-            const { data: encomiendas, error: encError } = await supabase
+            let queryEncomiendas = supabase
                 .from('encomiendas')
-                .select(`
-                    *,
-                    usuarios!inner (nombre_usuario)
-                `)
-                .in('ruta_config_id', rutaIds)
+                .select(`*, usuarios!inner (nombre_usuario)`)
                 .eq('estado', 'en_proceso')
                 .order('fecha_creacion', { ascending: false });
 
-            // Obtener viajes que coinciden con las rutas del conductor
-            const { data: viajes, error: viajesError } = await supabase
+            queryEncomiendas = rutaIds.length > 0
+                ? queryEncomiendas.or(`ruta_config_id.in.(${rutaIds.join(',')}),conductor_id.eq.${req.user.conductor_id}`)
+                : queryEncomiendas.eq('conductor_id', req.user.conductor_id);
+
+            const { data: encomiendas, error: encError } = await queryEncomiendas;
+
+            let queryViajes = supabase
                 .from('viajes')
-                .select(`
-                    *,
-                    usuarios!inner (nombre_usuario)
-                `)
-                .in('ruta_config_id', rutaIds)
+                .select(`*, usuarios!inner (nombre_usuario)`)
                 .eq('estado', 'en_proceso')
                 .order('fecha_creacion', { ascending: false });
+
+            queryViajes = rutaIds.length > 0
+                ? queryViajes.or(`ruta_config_id.in.(${rutaIds.join(',')}),conductor_id.eq.${req.user.conductor_id}`)
+                : queryViajes.eq('conductor_id', req.user.conductor_id);
+
+            const { data: viajes, error: viajesError } = await queryViajes;
 
             const formatearEncomiendas = (encomiendas || []).map(e => ({
                 ...e,
@@ -529,7 +561,6 @@ class OrderController {
 
     static async culminarEncomienda(req, res) {
         try {
-            // Verificar que existe y está en proceso
             const { data: existente, error: findError } = await supabase
                 .from('encomiendas')
                 .select('estado, usuario_id, origen, destino')
@@ -573,7 +604,6 @@ class OrderController {
 
     static async culminarViaje(req, res) {
         try {
-            // Verificar que existe y está en proceso
             const { data: existente, error: findError } = await supabase
                 .from('viajes')
                 .select('estado, usuario_id, origen, destino')
@@ -617,7 +647,6 @@ class OrderController {
 
     static async obtenerHistorialCulminados(req, res) {
         try {
-            // Obtener encomiendas culminadas
             const { data: encomiendas, error: encError } = await supabase
                 .from('encomiendas')
                 .select(`
@@ -629,7 +658,6 @@ class OrderController {
                 .eq('estado', 'culminado')
                 .order('fecha_culminacion', { ascending: false });
 
-            // Obtener viajes culminados
             const { data: viajes, error: viajesError } = await supabase
                 .from('viajes')
                 .select(`
