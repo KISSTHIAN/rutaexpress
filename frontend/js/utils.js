@@ -226,22 +226,13 @@ function closeMobileSidebar() {
 // ============ NOTIFICACIONES ============
 
 const Notifications = {
-    _intervalId: null,
     _items: [],
-    _pollMs: 25000, // cada 25 segundos; el backend es serverless, no hay WebSockets
+    _loaded: false,
 
+    // Se llama una sola vez al montar el panel (user o driver).
+    // Solo registra el click-outside; NO hace fetch automático.
     init() {
-        Notifications.fetchAndRender();
-        Notifications.stop(); // por si ya había un intervalo de una sesión anterior
-        Notifications._intervalId = setInterval(Notifications.fetchAndRender, Notifications._pollMs);
         document.addEventListener('click', Notifications._handleOutsideClick);
-    },
-
-    stop() {
-        if (Notifications._intervalId) {
-            clearInterval(Notifications._intervalId);
-            Notifications._intervalId = null;
-        }
     },
 
     renderBell() {
@@ -256,19 +247,22 @@ const Notifications = {
                     <strong>Notificaciones</strong>
                     <a href="#" onclick="Notifications.markAllRead(event)">Marcar todas leídas</a>
                 </div>
-                <div id="notifList"><div class="empty-state" style="padding:20px">Cargando...</div></div>
+                <div id="notifList"><div class="empty-state" style="padding:20px">Pulsa la campana para cargar</div></div>
             </div>
         </div>`;
     },
 
     async fetchAndRender() {
+        const list = document.getElementById('notifList');
+        if (list) list.innerHTML = '<div class="empty-state" style="padding:20px"><i class="fas fa-spinner fa-spin"></i> Cargando...</div>';
         try {
             const res = await apiCall('/notifications');
             Notifications._items = res.data || [];
+            Notifications._loaded = true;
             Notifications._updateBadge(res.no_leidas || 0);
             Notifications._renderList();
         } catch (e) {
-            // Silencioso: si falla un poll no queremos llenar la pantalla de toasts
+            if (list) list.innerHTML = '<div class="empty-state" style="padding:20px">No se pudieron cargar las notificaciones</div>';
         }
     },
 
@@ -303,9 +297,16 @@ const Notifications = {
             </div>`).join('');
     },
 
+    // Al abrir el dropdown: siempre hace fetch fresco para mostrar las más recientes
     toggleDropdown(event) {
         event.stopPropagation();
-        document.getElementById('notifDropdown').classList.toggle('open');
+        const dropdown = document.getElementById('notifDropdown');
+        const estaAbierto = dropdown.classList.contains('open');
+        dropdown.classList.toggle('open');
+        if (!estaAbierto) {
+            // Cada vez que el usuario abre la campana, carga las notificaciones
+            Notifications.fetchAndRender();
+        }
     },
 
     _handleOutsideClick(event) {
