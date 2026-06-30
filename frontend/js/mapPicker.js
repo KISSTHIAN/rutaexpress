@@ -1,28 +1,6 @@
-// ============================================================
-// MapPicker: selector de ubicación con Google Maps
-// ============================================================
-// Se usa en los formularios de encomienda y viaje para que la persona
-// busque una dirección (autocompletado) y/o ajuste el punto exacto
-// arrastrando un marcador sobre el mapa. Guarda lat/lng en campos
-// ocultos del formulario para enviarlos junto con el resto de datos.
-//
-// Uso:
-//   1. En el HTML del formulario, poner un <div> contenedor con un id
-//      único, por ejemplo: <div id="mapOrigen"></div>
-//   2. Después de insertar ese HTML en el DOM, llamar:
-//        MapPicker.render('mapOrigen', { fieldPrefix: 'origin' });
-//      Esto crea los inputs ocultos origin_lat / origin_lng dentro del
-//      mismo formulario y dibuja el mapa + el buscador.
-//   3. Al leer el formulario, los campos origin_lat/origin_lng ya
-//      vienen incluidos en getFormData(form).
-//
-// Si Google Maps todavía no cargó (key sin configurar, sin red, etc.)
-// el selector se degrada a un simple input de texto, para que el
-// formulario nunca quede roto.
-
 const MapPicker = {
     _instances: {},
-    _defaultCenter: { lat: -8.1116, lng: -79.0288 }, // Trujillo, Perú (ajustable)
+    _defaultCenter: { lat: -8.1116, lng: -79.0288 }, 
 
     isGoogleMapsReady() {
         return typeof google !== 'undefined' && google.maps && google.maps.places;
@@ -84,7 +62,7 @@ const MapPicker = {
             zoom: opts.initialLat ? 16 : 13,
             mapTypeControl: false,
             streetViewControl: false,
-            fullscreenControl: false
+            fullscreenControl: true
         });
 
         const marker = new google.maps.Marker({
@@ -106,8 +84,7 @@ const MapPicker = {
             const pos = marker.getPosition();
             setCoords(pos.lat(), pos.lng());
         });
-
-        // Permitir hacer click en el mapa para mover el marcador también
+        
         map.addListener('click', (e) => {
             marker.setPosition(e.latLng);
             setCoords(e.latLng.lat(), e.latLng.lng());
@@ -127,8 +104,6 @@ const MapPicker = {
             marker.setPosition(loc);
             setCoords(loc.lat(), loc.lng());
 
-            // Si se indicó un input de dirección visible en el formulario,
-            // completarlo automáticamente con la dirección elegida.
             if (opts.addressFieldName && form) {
                 const addressInput = form.querySelector(`[name="${opts.addressFieldName}"]`);
                 if (addressInput) addressInput.value = place.formatted_address || place.name || addressInput.value;
@@ -139,8 +114,59 @@ const MapPicker = {
             }
         });
 
-        // Intentar centrar en la ubicación actual del usuario al abrir,
-        // solo si no se pasó una ubicación inicial ya conocida.
+        // Permite pegar directamente un enlace de Google Maps (o unas
+        // coordenadas "lat,lng" copiadas de ahí) en el buscador, en vez de
+        // tener que escribir/buscar la dirección de nuevo. Reconoce formatos
+        // como:
+        //   https://www.google.com/maps/@-8.111,-79.028,15z
+        //   https://maps.google.com/?q=-8.111,-79.028
+        //   https://www.google.com/maps/place/.../@-8.111,-79.028,17z/...
+        //   -8.111, -79.028   (coordenadas sueltas)
+        function intentarUbicacionPegada(texto) {
+            if (!texto) return false;
+            let lat = null, lng = null;
+
+            // Coordenadas sueltas: "lat, lng"
+            let match = texto.match(/^\s*(-?\d{1,3}\.\d+)\s*,\s*(-?\d{1,3}\.\d+)\s*$/);
+            // Dentro de una URL: @lat,lng o ?q=lat,lng o &q=lat,lng o ll=lat,lng
+            if (!match) match = texto.match(/[@=](-?\d{1,3}\.\d+),(-?\d{1,3}\.\d+)/);
+
+            if (match) {
+                lat = parseFloat(match[1]);
+                lng = parseFloat(match[2]);
+            }
+
+            if (lat === null || lng === null || isNaN(lat) || isNaN(lng)) return false;
+            if (Math.abs(lat) > 90 || Math.abs(lng) > 180) return false;
+
+            const loc = new google.maps.LatLng(lat, lng);
+            map.setCenter(loc);
+            map.setZoom(17);
+            marker.setPosition(loc);
+            setCoords(lat, lng);
+
+            if (typeof google.maps.Geocoder === 'function') {
+                new google.maps.Geocoder().geocode({ location: loc }, (results, status) => {
+                    if (status === 'OK' && results && results[0]) {
+                        searchInput.value = results[0].formatted_address;
+                        if (opts.addressFieldName && form) {
+                            const addressInput = form.querySelector(`[name="${opts.addressFieldName}"]`);
+                            if (addressInput) addressInput.value = results[0].formatted_address;
+                        }
+                    }
+                });
+            }
+
+            if (typeof opts.onPlaceChanged === 'function') {
+                opts.onPlaceChanged({ geometry: { location: loc }, formatted_address: texto });
+            }
+            return true;
+        }
+
+        searchInput.addEventListener('paste', () => {
+            setTimeout(() => intentarUbicacionPegada(searchInput.value), 0);
+        });
+
         if (!opts.initialLat && navigator.geolocation) {
             navigator.geolocation.getCurrentPosition(
                 (pos) => {
@@ -170,3 +196,4 @@ const MapPicker = {
         return `https://www.google.com/maps?q=${lat},${lng}`;
     }
 };
+
