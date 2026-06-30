@@ -250,7 +250,7 @@ class DriverPanel {
             </div>
             <div class="form-group">
                 <label>Foto del vehículo (opcional)</label>
-                <input type="file" name="photo" accept="image/jpeg,image/png,image/webp" class="form-control">
+                <input type="file" name="photo" accept="image/jpeg,image/png,image/webp,image/heic,image/heif" class="form-control">
                 <p class="settings-desc">JPEG, PNG o WEBP, máximo 5MB.</p>
             </div>
             <button type="submit" class="btn btn-primary btn-block"><i class="fas fa-save"></i> Guardar</button>
@@ -358,8 +358,6 @@ class DriverPanel {
         } catch(e) { showToast(e.message,'error'); }
     }
 
-    // ============ PEDIDOS ============
-
     static getOrdersHTML() {
         return `<div class="card"><div class="card-header"><h4 class="card-title"><i class="fas fa-clipboard-list"></i> Pedidos Pendientes</h4></div><div id="ordersContent" class="card-body"><div class="empty-state">Cargando...</div></div></div>`;
     }
@@ -417,8 +415,6 @@ class DriverPanel {
         } catch(e) { showToast(e.message,'error'); }
     }
 
-    // ============ HISTORIAL ============
-
     static getHistoryHTML() {
         return `<div class="card"><div class="card-header"><h4 class="card-title"><i class="fas fa-chart-line"></i> Historial de Pedidos</h4></div><div class="card-body"><div id="historyContent"><div class="empty-state">Cargando...</div></div></div></div>`;
     }
@@ -443,19 +439,13 @@ class DriverPanel {
         } catch(e) { document.getElementById('historyContent').innerHTML='<div class="empty-state">Error al cargar</div>'; }
     }
 
-    // ============ RESEÑAS ============
-
     static async loadReviews() {
         document.getElementById('sectionContent').innerHTML = await Ratings.renderDriverReviewsHTML();
     }
 
-    // ============ SUSCRIPCIÓN ============
-
     static async loadSubscription() {
         document.getElementById('sectionContent').innerHTML = await Subscription.renderSectionHTML();
     }
-
-    // ============ AJUSTES ============
 
     static getSettingsHTML() {
         const currentTheme = getSavedTheme();
@@ -521,3 +511,4 @@ class DriverPanel {
         } catch(e) { showToast(e.message,'error'); }
     }
 }
+
