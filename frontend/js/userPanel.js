@@ -8,7 +8,7 @@ class UserPanel {
             <div class="mobile-overlay" id="mobileOverlay" onclick="closeMobileSidebar()"></div>
             <aside class="sidebar" id="appSidebar">
                 <div class="sidebar-logo">
-                    <h3>🚀 Ruta Express</h3>
+                    <h3>Ruta Express</h3>
                     <span>Panel de Usuario</span>
                 </div>
                 <nav class="sidebar-nav">
@@ -85,8 +85,6 @@ class UserPanel {
         if (asyncLoads[section]) setTimeout(asyncLoads[section], 200);
     }
 
-    // ============ DASHBOARD ============
-
     static getDashboardHTML() {
         return `
         <div class="stats-grid">
@@ -127,8 +125,6 @@ class UserPanel {
         } catch(e) {}
     }
 
-    // ============ PERFIL ============
-
     static getProfileHTML() {
         const user = getUser();
         return `<div class="card"><div class="card-header"><h4 class="card-title">Mi Perfil</h4></div><div class="card-body">
@@ -165,9 +161,7 @@ class UserPanel {
             const user = getUser(); if(user){ user.username=event.target.username.value; setUser(user); }
         } catch(e) { showToast(e.message,'error'); }
     }
-
-    // ============ ENCOMIENDAS ============
-
+    
     static getParcelsHTML() {
         return `<div class="card"><div class="card-header">
             <h4 class="card-title"><i class="fas fa-box"></i> Mis Encomiendas</h4>
@@ -223,28 +217,47 @@ class UserPanel {
             <button class="btn btn-secondary btn-block" onclick="UserPanel.showParcelManualForm()">Continuar con origen/destino manual</button>`;
         }
 
-        const tarjetas = rutas.map(r => `
-        <div class="driver-card ${r.vehiculo_lleno ? 'driver-card-full' : ''}" data-route-id="${r.id}"
-             onclick="${r.vehiculo_lleno ? '' : `UserPanel.selectParcelRoute(${r.id})`}"
-             style="${r.vehiculo_lleno ? 'opacity:.55;cursor:not-allowed' : 'cursor:pointer'}">
-            <div class="driver-card-info">
-                <div class="driver-card-name"><i class="fas fa-user-circle"></i> ${r.nombre_completo||'Conductor'}</div>
-                <div class="driver-card-meta">
-                    <span><i class="fas fa-map-marker-alt"></i> ${r.origen} → ${r.destino}</span>
-                    <span><i class="fas fa-tag"></i> S/ ${parseFloat(r.precio).toFixed(2)}</span>
-                    ${r.placa ? `<span><i class="fas fa-car"></i> ${r.placa}</span>` : ''}
-                    ${r.capacidad_vehiculo ? `<span><i class="fas fa-users"></i> ${r.asientos_disponibles} de ${r.capacidad_vehiculo} asientos</span>` : ''}
+        const tarjetas = rutas.map(r => {
+            if (r.sin_ruta) {
+                return `
+                <div class="driver-card" data-conductor-id="${r.conductor_id}"
+                     onclick="UserPanel.selectParcelDriver(${r.conductor_id})" style="cursor:pointer">
+                    <div class="driver-card-info">
+                        <div class="driver-card-name"><i class="fas fa-user-circle"></i> ${r.nombre_completo||'Conductor'}</div>
+                        <div class="driver-card-meta">
+                            <span><i class="fas fa-route"></i> Sin ruta fija — tú indicas origen y destino</span>
+                            ${r.placa ? `<span><i class="fas fa-car"></i> ${r.placa}</span>` : ''}
+                            ${r.capacidad_vehiculo ? `<span><i class="fas fa-users"></i> ${r.capacidad_vehiculo} asientos</span>` : ''}
+                        </div>
+                        <div class="driver-card-rating">${Ratings.renderStars(r.rating_promedio, r.rating_total)}</div>
+                    </div>
+                    <span class="badge badge-success"><i class="fas fa-circle"></i> Disponible</span>
+                </div>`;
+            }
+            return `
+            <div class="driver-card ${r.vehiculo_lleno ? 'driver-card-full' : ''}" data-route-id="${r.id}"
+                 onclick="${r.vehiculo_lleno ? '' : `UserPanel.selectParcelRoute(${r.id})`}"
+                 style="${r.vehiculo_lleno ? 'opacity:.55;cursor:not-allowed' : 'cursor:pointer'}">
+                <div class="driver-card-info">
+                    <div class="driver-card-name"><i class="fas fa-user-circle"></i> ${r.nombre_completo||'Conductor'}</div>
+                    <div class="driver-card-meta">
+                        <span><i class="fas fa-map-marker-alt"></i> ${r.origen} → ${r.destino}</span>
+                        <span><i class="fas fa-tag"></i> S/ ${parseFloat(r.precio).toFixed(2)}</span>
+                        ${r.placa ? `<span><i class="fas fa-car"></i> ${r.placa}</span>` : ''}
+                        ${r.capacidad_vehiculo ? `<span><i class="fas fa-users"></i> ${r.asientos_disponibles} de ${r.capacidad_vehiculo} asientos</span>` : ''}
+                    </div>
+                    <div class="driver-card-rating">${Ratings.renderStars(r.rating_promedio, r.rating_total)}</div>
                 </div>
-                <div class="driver-card-rating">${Ratings.renderStars(r.rating_promedio, r.rating_total)}</div>
-            </div>
-            ${r.vehiculo_lleno
-                ? `<span class="badge badge-danger"><i class="fas fa-ban"></i> Vehículo lleno</span>`
-                : `<span class="badge badge-success"><i class="fas fa-circle"></i> Disponible</span>`}
-        </div>`).join('');
+                ${r.vehiculo_lleno
+                    ? `<span class="badge badge-danger"><i class="fas fa-ban"></i> Vehículo lleno</span>`
+                    : `<span class="badge badge-success"><i class="fas fa-circle"></i> Disponible</span>`}
+            </div>`;
+        }).join('');
 
         return `
         <form id="parcelForm" onsubmit="UserPanel.saveParcel(event)">
             <input type="hidden" name="route_id" id="parcelSelectedRoute">
+            <input type="hidden" name="conductor_id" id="parcelSelectedConductor">
             <div class="form-group">
                 <label><i class="fas fa-car"></i> Elige un conductor disponible</label>
                 <div class="driver-card-list">${tarjetas}</div>
@@ -284,6 +297,7 @@ class UserPanel {
         document.querySelectorAll('.driver-card').forEach(c => c.classList.remove('driver-card-selected'));
         document.querySelector(`[data-route-id="${routeId}"]`)?.classList.add('driver-card-selected');
         document.getElementById('parcelSelectedRoute').value = routeId;
+        document.getElementById('parcelSelectedConductor').value = '';
 
         const ruta = UserPanel._parcelRoutesCache.find(r => String(r.id) === String(routeId));
         const info = document.getElementById('parcelRouteInfo');
@@ -294,7 +308,35 @@ class UserPanel {
             </div>`;
         }
 
-        // Inicializar mapas de ubicación exacta tras elegir ruta
+        document.getElementById('parcelOriginText')?.removeAttribute('required');
+        document.getElementById('parcelDestinationText')?.removeAttribute('required');
+
+        setTimeout(() => {
+            MapPicker.render('mapParcelOrigin', { fieldPrefix: 'origin', addressFieldName: 'origin' });
+            MapPicker.render('mapParcelDestination', { fieldPrefix: 'destination', addressFieldName: 'destination' });
+        }, 150);
+    }
+
+    static selectParcelDriver(conductorId) {
+        document.querySelectorAll('.driver-card').forEach(c => c.classList.remove('driver-card-selected'));
+        document.querySelector(`[data-conductor-id="${conductorId}"]`)?.classList.add('driver-card-selected');
+        document.getElementById('parcelSelectedConductor').value = conductorId;
+        document.getElementById('parcelSelectedRoute').value = '';
+
+        const conductor = UserPanel._parcelRoutesCache.find(r => r.sin_ruta && String(r.conductor_id) === String(conductorId));
+        const info = document.getElementById('parcelRouteInfo');
+        if (conductor) {
+            info.innerHTML = `<div class="alert alert-success" style="margin-top:8px">
+                <i class="fas fa-check-circle"></i>
+                Conductor seleccionado: <strong>${conductor.nombre_completo}</strong> · Indica abajo el origen y destino exactos.
+            </div>`;
+        }
+
+        // Sin ruta fija, el origen/destino exacto es obligatorio porque no
+        // hay ruta de la cual tomarlo por defecto.
+        document.getElementById('parcelOriginText')?.setAttribute('required', 'required');
+        document.getElementById('parcelDestinationText')?.setAttribute('required', 'required');
+
         setTimeout(() => {
             MapPicker.render('mapParcelOrigin', { fieldPrefix: 'origin', addressFieldName: 'origin' });
             MapPicker.render('mapParcelDestination', { fieldPrefix: 'destination', addressFieldName: 'destination' });
@@ -340,7 +382,6 @@ class UserPanel {
             closeModal();
             UserPanel.loadParcels();
 
-            // Modal de confirmación con enlace a WhatsApp del conductor
             UserPanel.showWhatsAppConfirm(res.data, 'encomienda', {
                 descripcion: formData.description,
                 receptor: formData.receiver_name,
@@ -362,8 +403,6 @@ class UserPanel {
             UserPanel.loadParcels();
         } catch(e) { showToast(e.message,'error'); }
     }
-
-    // ============ VIAJES ============
 
     static getTripsHTML() {
         return `<div class="card"><div class="card-header">
@@ -419,34 +458,53 @@ class UserPanel {
             <button class="btn btn-secondary btn-block" onclick="UserPanel.showTripManualForm()">Continuar con datos manuales</button>`;
         }
 
-        const tarjetas = rutas.map(r => `
-        <div class="driver-card ${r.vehiculo_lleno ? 'driver-card-full' : ''}" data-route-id="${r.id}"
-             onclick="${r.vehiculo_lleno ? '' : `UserPanel.selectTripRoute(${r.id})`}"
-             style="${r.vehiculo_lleno ? 'opacity:.55;cursor:not-allowed' : 'cursor:pointer'}">
-            <div class="driver-card-info">
-                <div class="driver-card-name"><i class="fas fa-user-circle"></i> ${r.nombre_completo||'Conductor'}</div>
-                <div class="driver-card-meta">
-                    <span><i class="fas fa-map-marker-alt"></i> ${r.origen} → ${r.destino}</span>
-                    <span><i class="fas fa-tag"></i> S/ ${parseFloat(r.precio).toFixed(2)}/pasajero</span>
-                    ${r.placa ? `<span><i class="fas fa-car"></i> ${r.placa}${r.marca ? ' · '+r.marca : ''}</span>` : ''}
-                    ${r.capacidad_vehiculo
-                        ? `<span><i class="fas fa-users"></i>
-                           <strong>${r.asientos_disponibles}</strong> de ${r.capacidad_vehiculo} asientos libres</span>`
-                        : ''}
-                    ${r.horarios && r.horarios.length
-                        ? `<span><i class="fas fa-clock"></i> ${r.horarios.map(h=>formatTime12h(h.hora_salida)).join(' · ')}</span>`
-                        : ''}
+        const tarjetas = rutas.map(r => {
+            if (r.sin_ruta) {
+                return `
+                <div class="driver-card" data-conductor-id="${r.conductor_id}"
+                     onclick="UserPanel.selectTripDriver(${r.conductor_id})" style="cursor:pointer">
+                    <div class="driver-card-info">
+                        <div class="driver-card-name"><i class="fas fa-user-circle"></i> ${r.nombre_completo||'Conductor'}</div>
+                        <div class="driver-card-meta">
+                            <span><i class="fas fa-route"></i> Sin ruta fija — tú indicas origen y destino</span>
+                            ${r.placa ? `<span><i class="fas fa-car"></i> ${r.placa}${r.marca ? ' · '+r.marca : ''}</span>` : ''}
+                            ${r.capacidad_vehiculo ? `<span><i class="fas fa-users"></i> ${r.capacidad_vehiculo} asientos</span>` : ''}
+                        </div>
+                        <div class="driver-card-rating">${Ratings.renderStars(r.rating_promedio, r.rating_total)}</div>
+                    </div>
+                    <span class="badge badge-success"><i class="fas fa-circle"></i> Disponible</span>
+                </div>`;
+            }
+            return `
+            <div class="driver-card ${r.vehiculo_lleno ? 'driver-card-full' : ''}" data-route-id="${r.id}"
+                 onclick="${r.vehiculo_lleno ? '' : `UserPanel.selectTripRoute(${r.id})`}"
+                 style="${r.vehiculo_lleno ? 'opacity:.55;cursor:not-allowed' : 'cursor:pointer'}">
+                <div class="driver-card-info">
+                    <div class="driver-card-name"><i class="fas fa-user-circle"></i> ${r.nombre_completo||'Conductor'}</div>
+                    <div class="driver-card-meta">
+                        <span><i class="fas fa-map-marker-alt"></i> ${r.origen} → ${r.destino}</span>
+                        <span><i class="fas fa-tag"></i> S/ ${parseFloat(r.precio).toFixed(2)}/pasajero</span>
+                        ${r.placa ? `<span><i class="fas fa-car"></i> ${r.placa}${r.marca ? ' · '+r.marca : ''}</span>` : ''}
+                        ${r.capacidad_vehiculo
+                            ? `<span><i class="fas fa-users"></i>
+                               <strong>${r.asientos_disponibles}</strong> de ${r.capacidad_vehiculo} asientos libres</span>`
+                            : ''}
+                        ${r.horarios && r.horarios.length
+                            ? `<span><i class="fas fa-clock"></i> ${r.horarios.map(h=>formatTime12h(h.hora_salida)).join(' · ')}</span>`
+                            : ''}
+                    </div>
+                    <div class="driver-card-rating">${Ratings.renderStars(r.rating_promedio, r.rating_total)}</div>
                 </div>
-                <div class="driver-card-rating">${Ratings.renderStars(r.rating_promedio, r.rating_total)}</div>
-            </div>
-            ${r.vehiculo_lleno
-                ? `<span class="badge badge-danger"><i class="fas fa-ban"></i> Vehículo lleno</span>`
-                : `<span class="badge badge-success"><i class="fas fa-circle"></i> Disponible</span>`}
-        </div>`).join('');
+                ${r.vehiculo_lleno
+                    ? `<span class="badge badge-danger"><i class="fas fa-ban"></i> Vehículo lleno</span>`
+                    : `<span class="badge badge-success"><i class="fas fa-circle"></i> Disponible</span>`}
+            </div>`;
+        }).join('');
 
         return `
         <form id="tripForm" onsubmit="UserPanel.saveTrip(event)">
             <input type="hidden" name="route_id" id="tripSelectedRoute">
+            <input type="hidden" name="conductor_id" id="tripSelectedConductor">
             <div class="form-group">
                 <label><i class="fas fa-car"></i> Elige un conductor disponible</label>
                 <div class="driver-card-list">${tarjetas}</div>
@@ -480,6 +538,7 @@ class UserPanel {
         document.querySelectorAll('.driver-card').forEach(c => c.classList.remove('driver-card-selected'));
         document.querySelector(`[data-route-id="${routeId}"]`)?.classList.add('driver-card-selected');
         document.getElementById('tripSelectedRoute').value = routeId;
+        document.getElementById('tripSelectedConductor').value = '';
 
         const ruta = UserPanel._tripRoutesCache.find(r => String(r.id) === String(routeId));
         const info = document.getElementById('tripRouteInfo');
@@ -490,7 +549,6 @@ class UserPanel {
             </div>`;
         }
 
-        // Horarios del conductor seleccionado
         const container = document.getElementById('tripScheduleContainer');
         const horarios = ruta?.horarios || [];
         if (horarios.length > 0) {
@@ -502,7 +560,35 @@ class UserPanel {
             container.innerHTML = `<div class="form-group"><label>Hora de salida deseada</label>${TimePicker.render('departure_time_manual')}</div>`;
         }
 
-        // Mapas de ubicación exacta
+        document.getElementById('tripOriginText')?.removeAttribute('required');
+        document.getElementById('tripDestinationText')?.removeAttribute('required');
+
+        setTimeout(() => {
+            MapPicker.render('mapTripOrigin', { fieldPrefix: 'origin', addressFieldName: 'origin' });
+            MapPicker.render('mapTripDestination', { fieldPrefix: 'destination', addressFieldName: 'destination' });
+        }, 150);
+    }
+
+    static selectTripDriver(conductorId) {
+        document.querySelectorAll('.driver-card').forEach(c => c.classList.remove('driver-card-selected'));
+        document.querySelector(`[data-conductor-id="${conductorId}"]`)?.classList.add('driver-card-selected');
+        document.getElementById('tripSelectedConductor').value = conductorId;
+        document.getElementById('tripSelectedRoute').value = '';
+
+        const conductor = UserPanel._tripRoutesCache.find(r => r.sin_ruta && String(r.conductor_id) === String(conductorId));
+        const info = document.getElementById('tripRouteInfo');
+        if (conductor) {
+            info.innerHTML = `<div class="alert alert-success" style="margin-top:8px">
+                <i class="fas fa-check-circle"></i> Conductor: <strong>${conductor.nombre_completo}</strong> · Indica abajo origen, destino y hora.
+            </div>`;
+        }
+
+        const container = document.getElementById('tripScheduleContainer');
+        container.innerHTML = `<div class="form-group"><label>Hora de salida deseada</label>${TimePicker.render('departure_time_manual')}</div>`;
+
+        document.getElementById('tripOriginText')?.setAttribute('required', 'required');
+        document.getElementById('tripDestinationText')?.setAttribute('required', 'required');
+
         setTimeout(() => {
             MapPicker.render('mapTripOrigin', { fieldPrefix: 'origin', addressFieldName: 'origin' });
             MapPicker.render('mapTripDestination', { fieldPrefix: 'destination', addressFieldName: 'destination' });
@@ -572,8 +658,6 @@ class UserPanel {
         } catch(e) { showToast(e.message,'error'); }
     }
 
-    // ============ MODAL DE WHATSAPP (post-creación) ============
-
     static showWhatsAppConfirm(pedidoData, tipo, extras) {
         const conductor = pedidoData?.conductor_contacto;
         const whatsapp = conductor?.whatsapp?.replace(/\D/g,'');
@@ -630,8 +714,6 @@ class UserPanel {
         );
     }
 
-    // ============ MIS PEDIDOS (historial con calificaciones) ============
-
     static getStatusHTML() {
         return `
         <div class="section-tabs">
@@ -662,7 +744,6 @@ class UserPanel {
 
             if (!all.length) { content.innerHTML='<div class="empty-state"><i class="fas fa-inbox"></i><p>No hay pedidos</p></div>'; return; }
 
-            // Para pedidos culminados, verificar cuáles ya fueron calificados
             let calificados = {};
             if (status === 'culminado') {
                 const checks = await Promise.all(all.map(o =>
@@ -709,8 +790,6 @@ class UserPanel {
             </div>`;
         } catch(e) { content.innerHTML = '<div class="empty-state">Error al cargar</div>'; }
     }
-
-    // ============ AJUSTES ============
 
     static getSettingsHTML() {
         const currentTheme = getSavedTheme();
@@ -778,3 +857,4 @@ class UserPanel {
         } catch(e) { showToast(e.message,'error'); }
     }
 }
+
