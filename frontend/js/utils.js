@@ -115,10 +115,6 @@ function confirmAction(msg, danger = true) {
     });
 }
 
-// ============ HORA EN FORMATO 12H (AM/PM) ============
-
-// Convierte una hora en formato "HH:MM" o "HH:MM:SS" (24h, como la guarda la BD)
-// a texto legible en 12 horas, ej: "14:30" -> "2:30 PM"
 function formatTime12h(time24) {
     if (!time24) return '—';
     const [hStr, mStr] = String(time24).split(':');
@@ -130,9 +126,6 @@ function formatTime12h(time24) {
     return `${h}:${String(m).padStart(2, '0')} ${period}`;
 }
 
-// Componente de selección de hora: hora 1-12, minutos 00-59, AM/PM.
-// Genera 3 <select> independientes con name="<fieldName>_hour", "_minute", "_period".
-// Usar TimePicker.readValue(form, fieldName) para obtener "HH:MM" en formato 24h al enviar.
 const TimePicker = {
     render(fieldName, opts = {}) {
         const hours = Array.from({ length: 12 }, (_, i) => i + 1);
@@ -157,7 +150,6 @@ const TimePicker = {
         </div>`;
     },
 
-    // Lee los 3 selects de un formulario y devuelve "HH:MM" en 24h, o null si no existen
     readValue(form, fieldName) {
         const hourEl = form.querySelector(`[name="${fieldName}_hour"]`);
         const minuteEl = form.querySelector(`[name="${fieldName}_minute"]`);
@@ -174,7 +166,6 @@ const TimePicker = {
         return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`;
     },
 
-    // Convierte "HH:MM" (24h) a { hour, minute, period } para precargar el picker al editar
     parseValue(time24) {
         if (!time24) return { hour: 8, minute: 0, period: 'AM' };
         const [hStr, mStr] = String(time24).split(':');
@@ -186,8 +177,6 @@ const TimePicker = {
         return { hour: h, minute, period };
     }
 };
-
-// ============ TEMA CLARO / OSCURO ============
 
 function applyTheme(theme) {
     const t = theme === 'oscuro' ? 'oscuro' : 'claro';
@@ -202,12 +191,7 @@ function setSavedTheme(theme) {
     localStorage.setItem('ruta_express_theme', theme);
     applyTheme(theme);
 }
-
-// Aplicar el tema guardado inmediatamente al cargar el script,
-// antes de que se pinte cualquier vista (evita parpadeo de tema incorrecto)
 applyTheme(getSavedTheme());
-
-// ============ SIDEBAR MÓVIL ============
 
 function openMobileSidebar() {
     const sidebar = document.getElementById('appSidebar');
@@ -223,16 +207,16 @@ function closeMobileSidebar() {
     if (overlay) overlay.classList.remove('active');
 }
 
-// ============ NOTIFICACIONES ============
-
 const Notifications = {
     _items: [],
     _loaded: false,
 
-    // Se llama una sola vez al montar el panel (user o driver).
-    // Solo registra el click-outside; NO hace fetch automático.
     init() {
         document.addEventListener('click', Notifications._handleOutsideClick);
+    },
+
+    stop() {
+        document.removeEventListener('click', Notifications._handleOutsideClick);
     },
 
     renderBell() {
@@ -297,14 +281,12 @@ const Notifications = {
             </div>`).join('');
     },
 
-    // Al abrir el dropdown: siempre hace fetch fresco para mostrar las más recientes
     toggleDropdown(event) {
         event.stopPropagation();
         const dropdown = document.getElementById('notifDropdown');
         const estaAbierto = dropdown.classList.contains('open');
         dropdown.classList.toggle('open');
         if (!estaAbierto) {
-            // Cada vez que el usuario abre la campana, carga las notificaciones
             Notifications.fetchAndRender();
         }
     },
@@ -333,14 +315,12 @@ const Notifications = {
     }
 };
 
-// ============ CHATBOT (preguntas frecuentes) ============
-
 const Chatbot = {
     _open: false,
     _history: [],
 
     init() {
-        if (document.getElementById('chatbotWidget')) return; // ya está montado
+        if (document.getElementById('chatbotWidget')) return; 
         const wrapper = document.createElement('div');
         wrapper.id = 'chatbotWidget';
         wrapper.innerHTML = `
