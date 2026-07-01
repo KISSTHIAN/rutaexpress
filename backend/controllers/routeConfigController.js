@@ -117,6 +117,15 @@ class RouteConfigController {
 
     static async obtenerRutasDisponibles(req, res) {
         try {
+            // NOTA IMPORTANTE: "vehiculos" NO tiene una relación directa
+            // (foreign key) con "configuracion_rutas" en la base de datos —
+            // solo está relacionada con "conductores" (vehiculos.conductor_id
+            // → conductores.id). Pedirle a Supabase/PostgREST que la incluya
+            // aquí como si estuvieran conectadas directamente hacía que la
+            // consulta fallara con error 500 ("no se pudo encontrar la
+            // relación entre configuracion_rutas y vehiculos"), que es
+            // exactamente el error que estabas viendo. Por eso el vehículo
+            // se trae por separado más abajo, usando el id del conductor.
             const { data, error } = await supabase
                 .from('configuracion_rutas')
                 .select(`
@@ -128,14 +137,6 @@ class RouteConfigController {
                         whatsapp,
                         disponible,
                         estado
-                    ),
-                    vehiculos (
-                        placa,
-                        marca,
-                        modelo,
-                        color,
-                        capacidad,
-                        foto_vehiculo
                     )
                 `)
                 .eq('estado', 'activo')
@@ -152,6 +153,23 @@ class RouteConfigController {
             );
 
             const conductorIds = [...new Set(rutasFiltradas.map(r => r.conductores?.id).filter(Boolean))];
+
+            // Vehículo de cada conductor (una sola consulta para todos).
+            // Se asume un vehículo por conductor; si tuviera varios, se usa
+            // el primero encontrado.
+            let vehiculoPorConductorId = {};
+            if (conductorIds.length > 0) {
+                const { data: vehiculosData, error: vehError } = await supabase
+                    .from('vehiculos')
+                    .select('conductor_id, placa, marca, modelo, color, capacidad, foto_vehiculo')
+                    .in('conductor_id', conductorIds);
+
+                if (!vehError && vehiculosData) {
+                    vehiculosData.forEach(v => {
+                        if (!vehiculoPorConductorId[v.conductor_id]) vehiculoPorConductorId[v.conductor_id] = v;
+                    });
+                }
+            }
 
             let horariosPorConductor = {};
             if (conductorIds.length > 0) {
@@ -212,7 +230,8 @@ class RouteConfigController {
             }
 
             const rutasFormateadas = rutasFiltradas.map(r => {
-                const capacidad = r.vehiculos?.[0]?.capacidad ? parseInt(r.vehiculos[0].capacidad, 10) : null;
+                const v = vehiculoPorConductorId[r.conductores?.id] || {};
+                const capacidad = v.capacidad ? parseInt(v.capacidad, 10) : null;
                 const ocupados = ocupadosPorRuta[r.id] || 0;
                 const disponibles = capacidad !== null ? Math.max(0, capacidad - ocupados) : null;
                 const rating = ratingPorConductor[r.conductores?.id] || { promedio: 0, total: 0 };
@@ -222,11 +241,11 @@ class RouteConfigController {
                     nombre_completo: r.conductores?.nombre_completo,
                     telefono_1: r.conductores?.telefono_1,
                     whatsapp: r.conductores?.whatsapp || r.conductores?.telefono_1,
-                    placa: r.vehiculos?.[0]?.placa,
-                    marca: r.vehiculos?.[0]?.marca,
-                    modelo: r.vehiculos?.[0]?.modelo,
-                    color_vehiculo: r.vehiculos?.[0]?.color,
-                    foto_vehiculo: r.vehiculos?.[0]?.foto_vehiculo,
+                    placa: v.placa || null,
+                    marca: v.marca || null,
+                    modelo: v.modelo || null,
+                    color_vehiculo: v.color || null,
+                    foto_vehiculo: v.foto_vehiculo || null,
                     capacidad_vehiculo: capacidad,
                     asientos_ocupados: ocupados,
                     asientos_disponibles: disponibles,
