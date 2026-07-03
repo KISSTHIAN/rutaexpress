@@ -239,6 +239,9 @@ class UserPanel {
             destinoSelect.disabled = true;
             return;
         }
+
+        // Rutas que salen de ese origen (puede haber varios conductores
+        // ofreciendo el mismo destino, o destinos distintos).
         const disponibles = cache.filter(r => !r.sin_ruta && r.origen === origen && !r.vehiculo_lleno);
 
         if (disponibles.length === 0) {
@@ -268,6 +271,8 @@ class UserPanel {
             UserPanel.selectParcelRoute(parseInt(routeId, 10));
         }
 
+        // Llevar la vista hacia la tarjeta del conductor seleccionado,
+        // para que el cliente vea la confirmación visual.
         document.querySelector(`[data-route-id="${routeId}"]`)?.scrollIntoView({ behavior: 'smooth', block: 'center' });
     }
 
@@ -390,7 +395,7 @@ class UserPanel {
 
         setTimeout(() => {
             MapPicker.render('mapParcelOrigin', { fieldPrefix: 'origin', addressFieldName: 'origin' });
-            MapPicker.render('mapParcelDestination', { fieldPrefix: 'destination', addressFieldName: 'destination' });
+            MapPicker.render('mapParcelDestination', { fieldPrefix: 'destination', addressFieldName: 'destination', showGpsButton: false });
         }, 150);
     }
 
@@ -416,7 +421,7 @@ class UserPanel {
 
         setTimeout(() => {
             MapPicker.render('mapParcelOrigin', { fieldPrefix: 'origin', addressFieldName: 'origin' });
-            MapPicker.render('mapParcelDestination', { fieldPrefix: 'destination', addressFieldName: 'destination' });
+            MapPicker.render('mapParcelDestination', { fieldPrefix: 'destination', addressFieldName: 'destination', showGpsButton: false });
         }, 150);
     }
 
@@ -442,7 +447,7 @@ class UserPanel {
         </form>`);
         setTimeout(() => {
             MapPicker.render('mapParcelOrigin', { fieldPrefix: 'origin', addressFieldName: 'origin' });
-            MapPicker.render('mapParcelDestination', { fieldPrefix: 'destination', addressFieldName: 'destination' });
+            MapPicker.render('mapParcelDestination', { fieldPrefix: 'destination', addressFieldName: 'destination', showGpsButton: false });
         }, 300);
     }
 
@@ -643,7 +648,7 @@ class UserPanel {
 
         setTimeout(() => {
             MapPicker.render('mapTripOrigin', { fieldPrefix: 'origin', addressFieldName: 'origin' });
-            MapPicker.render('mapTripDestination', { fieldPrefix: 'destination', addressFieldName: 'destination' });
+            MapPicker.render('mapTripDestination', { fieldPrefix: 'destination', addressFieldName: 'destination', showGpsButton: false });
         }, 150);
     }
 
@@ -669,7 +674,7 @@ class UserPanel {
 
         setTimeout(() => {
             MapPicker.render('mapTripOrigin', { fieldPrefix: 'origin', addressFieldName: 'origin' });
-            MapPicker.render('mapTripDestination', { fieldPrefix: 'destination', addressFieldName: 'destination' });
+            MapPicker.render('mapTripDestination', { fieldPrefix: 'destination', addressFieldName: 'destination', showGpsButton: false });
         }, 150);
     }
 
@@ -693,7 +698,7 @@ class UserPanel {
         </form>`);
         setTimeout(() => {
             MapPicker.render('mapTripOrigin', { fieldPrefix: 'origin', addressFieldName: 'origin' });
-            MapPicker.render('mapTripDestination', { fieldPrefix: 'destination', addressFieldName: 'destination' });
+            MapPicker.render('mapTripDestination', { fieldPrefix: 'destination', addressFieldName: 'destination', showGpsButton: false });
         }, 300);
     }
 
@@ -753,7 +758,7 @@ class UserPanel {
 
         let msgLines = [
             `*Nuevo ${tipo === 'encomienda' ? 'pedido de encomienda' : 'viaje'} — Ruta Express*`,
-            `👤 Cliente: ${user?.username || 'Usuario'}`,
+            `Cliente: ${user?.username || 'Usuario'}`,
         ];
 
         if (tipo === 'encomienda') {
