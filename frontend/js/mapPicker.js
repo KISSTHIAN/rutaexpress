@@ -1,6 +1,6 @@
 const MapPicker = {
     _instances: {},
-    _defaultCenter: { lat: -8.1116, lng: -79.0288 }, 
+    _defaultCenter: { lat: -8.1116, lng: -79.0288 },
 
     isGoogleMapsReady() {
         return typeof google !== 'undefined' && google.maps && google.maps.places;
@@ -15,6 +15,12 @@ const MapPicker = {
      * existe en el formulario (la dirección); si se pasa, el autocompletado
      * escribe ahí en vez de crear un input nuevo.
      * opts.onPlaceChanged(place) es un callback opcional.
+     *
+     * DISEÑO MOBILE-FIRST: el mapa visual (Google Maps de verdad, con pin
+     * arrastrable) NO se muestra por defecto — solo aparece si el usuario
+     * toca "Abrir mapa". Por defecto solo se ve el buscador de texto y un
+     * botón "Usar mi ubicación actual" (GPS del navegador/celular). Esto
+     * hace el formulario mucho más liviano y rápido de usar en celulares.
      */
     render(containerId, opts = {}) {
         const container = document.getElementById(containerId);
@@ -23,9 +29,6 @@ const MapPicker = {
         const prefix = opts.fieldPrefix || containerId;
         const form = container.closest('form');
 
-        // Si Google Maps no está disponible, degradar a un aviso simple
-        // y no romper el formulario (los campos de texto normales siguen
-        // funcionando igual, simplemente no habrá lat/lng).
         if (!MapPicker.isGoogleMapsReady()) {
             container.innerHTML = `
                 <div class="map-picker-fallback">
@@ -41,8 +44,18 @@ const MapPicker = {
                     <i class="fas fa-search-location"></i>
                     <input type="text" class="form-control map-picker-input" placeholder="Busca una dirección..." autocomplete="off">
                 </div>
-                <div class="map-picker-canvas" id="${containerId}_canvas"></div>
-                <p class="map-picker-hint"><i class="fas fa-hand-pointer"></i> Puedes arrastrar el marcador para ajustar el punto exacto</p>
+                <div class="map-picker-actions">
+                    <button type="button" class="btn btn-secondary btn-sm map-picker-gps-btn">
+                        <i class="fas fa-location-arrow"></i> Usar mi ubicación actual
+                    </button>
+                    <button type="button" class="btn btn-link btn-sm map-picker-toggle-btn">
+                        <i class="fas fa-map"></i> Abrir mapa para ajustar el punto
+                    </button>
+                </div>
+                <div class="map-picker-canvas-wrapper" id="${containerId}_wrapper" style="display:none">
+                    <div class="map-picker-canvas" id="${containerId}_canvas"></div>
+                    <p class="map-picker-hint"><i class="fas fa-hand-pointer"></i> Puedes arrastrar el marcador para ajustar el punto exacto</p>
+                </div>
             </div>
             <input type="hidden" name="${prefix}_lat">
             <input type="hidden" name="${prefix}_lng">
@@ -51,25 +64,14 @@ const MapPicker = {
         const searchInput = container.querySelector('.map-picker-input');
         const latInput = container.querySelector(`[name="${prefix}_lat"]`);
         const lngInput = container.querySelector(`[name="${prefix}_lng"]`);
+        const mapWrapper = container.querySelector(`#${containerId}_wrapper`);
         const mapDiv = container.querySelector(`#${containerId}_canvas`);
+        const gpsBtn = container.querySelector('.map-picker-gps-btn');
+        const toggleBtn = container.querySelector('.map-picker-toggle-btn');
 
         const center = opts.initialLat && opts.initialLng
             ? { lat: parseFloat(opts.initialLat), lng: parseFloat(opts.initialLng) }
             : MapPicker._defaultCenter;
-
-        const map = new google.maps.Map(mapDiv, {
-            center,
-            zoom: opts.initialLat ? 16 : 13,
-            mapTypeControl: false,
-            streetViewControl: false,
-            fullscreenControl: true
-        });
-
-        const marker = new google.maps.Marker({
-            map,
-            position: center,
-            draggable: true
-        });
 
         function setCoords(lat, lng) {
             latInput.value = lat;
@@ -79,19 +81,122 @@ const MapPicker = {
         if (opts.initialLat && opts.initialLng) {
             setCoords(opts.initialLat, opts.initialLng);
         }
+        let mapInstance = null;
+        let markerInstance = null;
 
-        marker.addListener('dragend', () => {
-            const pos = marker.getPosition();
-            setCoords(pos.lat(), pos.lng());
+        function ensureMapCreated(atLocation) {
+            if (mapInstance) return mapInstance;
+
+            mapInstance = new google.maps.Map(mapDiv, {
+                center: atLocation || center,
+                zoom: atLocation ? 16 : 13,
+                mapTypeControl: false,
+                streetViewControl: false,
+                fullscreenControl: true
+            });
+
+            markerInstance = new google.maps.Marker({
+                map: mapInstance,
+                position: atLocation || center,
+                draggable: true
+            });
+
+            markerInstance.addListener('dragend', () => {
+                const pos = markerInstance.getPosition();
+                setCoords(pos.lat(), pos.lng());
+            });
+
+            mapInstance.addListener('click', (e) => {
+                markerInstance.setPosition(e.latLng);
+                setCoords(e.latLng.lat(), e.latLng.lng());
+            });
+
+            MapPicker._instances[containerId] = { map: mapInstance, marker: markerInstance };
+            return mapInstance;
+        }
+
+        function openMap(atLocation) {
+            mapWrapper.style.display = '';
+            ensureMapCreated(atLocation);
+            if (atLocation && mapInstance) {
+                mapInstance.setCenter(atLocation);
+                mapInstance.setZoom(16);
+                markerInstance.setPosition(atLocation);
+            }
+
+            setTimeout(() => google.maps.event.trigger(mapInstance, 'resize'), 50);
+        }
+
+        toggleBtn.addEventListener('click', () => {
+            const isHidden = mapWrapper.style.display === 'none';
+            if (isHidden) {
+                openMap();
+                toggleBtn.innerHTML = '<i class="fas fa-map"></i> Ocultar mapa';
+            } else {
+                mapWrapper.style.display = 'none';
+                toggleBtn.innerHTML = '<i class="fas fa-map"></i> Abrir mapa para ajustar el punto';
+            }
         });
-        
-        map.addListener('click', (e) => {
-            marker.setPosition(e.latLng);
-            setCoords(e.latLng.lat(), e.latLng.lng());
+
+        gpsBtn.addEventListener('click', () => {
+            if (!navigator.geolocation) {
+                showToast('Tu navegador no permite obtener la ubicación actual.', 'error');
+                return;
+            }
+            gpsBtn.disabled = true;
+            gpsBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Obteniendo ubicación...';
+
+            navigator.geolocation.getCurrentPosition(
+                (pos) => {
+                    const loc = { lat: pos.coords.latitude, lng: pos.coords.longitude };
+                    setCoords(loc.lat, loc.lng);
+
+                    if (mapInstance) {
+                        mapInstance.setCenter(loc);
+                        mapInstance.setZoom(16);
+                        markerInstance.setPosition(loc);
+                    }
+
+                    new google.maps.Geocoder().geocode({ location: loc }, (results, status) => {
+                        if (status === 'OK' && results && results[0]) {
+                            searchInput.value = results[0].formatted_address;
+                            if (opts.addressFieldName && form) {
+                                const addressInput = form.querySelector(`[name="${opts.addressFieldName}"]`);
+                                if (addressInput) addressInput.value = results[0].formatted_address;
+                            }
+                        }
+                        gpsBtn.disabled = false;
+                        gpsBtn.innerHTML = '<i class="fas fa-check"></i> Ubicación obtenida';
+                        setTimeout(() => {
+                            gpsBtn.innerHTML = '<i class="fas fa-location-arrow"></i> Usar mi ubicación actual';
+                        }, 2500);
+                    });
+
+                    if (typeof opts.onPlaceChanged === 'function') {
+                        opts.onPlaceChanged({ geometry: { location: new google.maps.LatLng(loc.lat, loc.lng) } });
+                    }
+                },
+                (err) => {
+                    gpsBtn.disabled = false;
+                    gpsBtn.innerHTML = '<i class="fas fa-location-arrow"></i> Usar mi ubicación actual';
+                    const mensaje = err.code === 1
+                        ? 'Debes permitir el acceso a tu ubicación para usar esta opción.'
+                        : 'No se pudo obtener tu ubicación. Intenta escribir la dirección.';
+                    showToast(mensaje, 'error');
+                },
+                { timeout: 8000, enableHighAccuracy: true }
+            );
         });
+
+        const piuraBounds = new google.maps.LatLngBounds(
+            { lat: -5.90, lng: -81.35 }, // suroeste
+            { lat: -4.05, lng: -79.20 }  // noreste
+        );
 
         const autocomplete = new google.maps.places.Autocomplete(searchInput, {
-            fields: ['geometry', 'formatted_address', 'name']
+            fields: ['geometry', 'formatted_address', 'name'],
+            componentRestrictions: { country: 'pe' },
+            bounds: piuraBounds
         });
 
         autocomplete.addListener('place_changed', () => {
@@ -99,10 +204,13 @@ const MapPicker = {
             if (!place.geometry || !place.geometry.location) return;
 
             const loc = place.geometry.location;
-            map.setCenter(loc);
-            map.setZoom(16);
-            marker.setPosition(loc);
             setCoords(loc.lat(), loc.lng());
+
+            if (mapInstance) {
+                mapInstance.setCenter(loc);
+                mapInstance.setZoom(16);
+                markerInstance.setPosition(loc);
+            }
 
             if (opts.addressFieldName && form) {
                 const addressInput = form.querySelector(`[name="${opts.addressFieldName}"]`);
@@ -114,21 +222,11 @@ const MapPicker = {
             }
         });
 
-        // Permite pegar directamente un enlace de Google Maps (o unas
-        // coordenadas "lat,lng" copiadas de ahí) en el buscador, en vez de
-        // tener que escribir/buscar la dirección de nuevo. Reconoce formatos
-        // como:
-        //   https://www.google.com/maps/@-8.111,-79.028,15z
-        //   https://maps.google.com/?q=-8.111,-79.028
-        //   https://www.google.com/maps/place/.../@-8.111,-79.028,17z/...
-        //   -8.111, -79.028   (coordenadas sueltas)
         function intentarUbicacionPegada(texto) {
             if (!texto) return false;
             let lat = null, lng = null;
 
-            // Coordenadas sueltas: "lat, lng"
             let match = texto.match(/^\s*(-?\d{1,3}\.\d+)\s*,\s*(-?\d{1,3}\.\d+)\s*$/);
-            // Dentro de una URL: @lat,lng o ?q=lat,lng o &q=lat,lng o ll=lat,lng
             if (!match) match = texto.match(/[@=](-?\d{1,3}\.\d+),(-?\d{1,3}\.\d+)/);
 
             if (match) {
@@ -140,22 +238,23 @@ const MapPicker = {
             if (Math.abs(lat) > 90 || Math.abs(lng) > 180) return false;
 
             const loc = new google.maps.LatLng(lat, lng);
-            map.setCenter(loc);
-            map.setZoom(17);
-            marker.setPosition(loc);
             setCoords(lat, lng);
 
-            if (typeof google.maps.Geocoder === 'function') {
-                new google.maps.Geocoder().geocode({ location: loc }, (results, status) => {
-                    if (status === 'OK' && results && results[0]) {
-                        searchInput.value = results[0].formatted_address;
-                        if (opts.addressFieldName && form) {
-                            const addressInput = form.querySelector(`[name="${opts.addressFieldName}"]`);
-                            if (addressInput) addressInput.value = results[0].formatted_address;
-                        }
-                    }
-                });
+            if (mapInstance) {
+                mapInstance.setCenter(loc);
+                mapInstance.setZoom(17);
+                markerInstance.setPosition(loc);
             }
+
+            new google.maps.Geocoder().geocode({ location: loc }, (results, status) => {
+                if (status === 'OK' && results && results[0]) {
+                    searchInput.value = results[0].formatted_address;
+                    if (opts.addressFieldName && form) {
+                        const addressInput = form.querySelector(`[name="${opts.addressFieldName}"]`);
+                        if (addressInput) addressInput.value = results[0].formatted_address;
+                    }
+                }
+            });
 
             if (typeof opts.onPlaceChanged === 'function') {
                 opts.onPlaceChanged({ geometry: { location: loc }, formatted_address: texto });
@@ -167,21 +266,6 @@ const MapPicker = {
             setTimeout(() => intentarUbicacionPegada(searchInput.value), 0);
         });
 
-        if (!opts.initialLat && navigator.geolocation) {
-            navigator.geolocation.getCurrentPosition(
-                (pos) => {
-                    const loc = { lat: pos.coords.latitude, lng: pos.coords.longitude };
-                    map.setCenter(loc);
-                    map.setZoom(15);
-                    marker.setPosition(loc);
-                    setCoords(loc.lat, loc.lng);
-                },
-                () => { /* si el usuario deniega el permiso, se queda el centro por defecto */ },
-                { timeout: 5000 }
-            );
-        }
-
-        MapPicker._instances[containerId] = { map, marker };
     },
 
     /** Útil si necesitas forzar Google Maps a redibujar tras mostrar un modal oculto */
