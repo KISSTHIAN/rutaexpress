@@ -195,6 +195,82 @@ class UserPanel {
         } catch(e) { showToast('Error al cargar encomiendas','error'); }
     }
 
+    /**
+     * Genera el selector guiado "Origen -> Destino": el cliente elige
+     * primero un origen (de la lista real de orígenes que ofrecen los
+     * conductores) y el campo Destino se llena solo con los destinos
+     * reales disponibles desde ese origen — así el cliente nunca ve una
+     * combinación que ningún conductor ofrece. Funciona para 'parcel' y
+     * 'trip' usando el mismo cache de rutas (_parcelRoutesCache / _tripRoutesCache).
+     */
+    static buildOriginDestinoSelector(rutas, tipo) {
+        const rutasConOrigen = rutas.filter(r => !r.sin_ruta && r.origen && r.destino);
+        if (rutasConOrigen.length === 0) return '';
+
+        const origenes = [...new Set(rutasConOrigen.map(r => r.origen))].sort();
+
+        return `
+        <div class="form-group">
+            <label><i class="fas fa-map-marker-alt" style="color:var(--primary)"></i> Origen</label>
+            <select id="${tipo}OriginSelect" class="form-control" onchange="UserPanel.onOriginChange('${tipo}')">
+                <option value="">-- Elige un origen --</option>
+                ${origenes.map(o => `<option value="${o.replace(/"/g,'&quot;')}">${o}</option>`).join('')}
+            </select>
+        </div>
+        <div class="form-group">
+            <label><i class="fas fa-map-marker-alt" style="color:var(--danger)"></i> Destino</label>
+            <select id="${tipo}DestinoSelect" class="form-control" onchange="UserPanel.onDestinoChange('${tipo}')" disabled>
+                <option value="">-- Primero elige un origen --</option>
+            </select>
+        </div>
+        <p class="form-hint" style="margin:-8px 0 12px;color:var(--text-secondary);font-size:.85em">
+            <i class="fas fa-info-circle"></i> O elige directamente un conductor de la lista de abajo.
+        </p>`;
+    }
+
+    static onOriginChange(tipo) {
+        const origenSelect = document.getElementById(`${tipo}OriginSelect`);
+        const destinoSelect = document.getElementById(`${tipo}DestinoSelect`);
+        const origen = origenSelect.value;
+        const cache = tipo === 'trip' ? UserPanel._tripRoutesCache : UserPanel._parcelRoutesCache;
+
+        if (!origen) {
+            destinoSelect.innerHTML = '<option value="">-- Primero elige un origen --</option>';
+            destinoSelect.disabled = true;
+            return;
+        }
+        const disponibles = cache.filter(r => !r.sin_ruta && r.origen === origen && !r.vehiculo_lleno);
+
+        if (disponibles.length === 0) {
+            destinoSelect.innerHTML = '<option value="">-- Sin destinos disponibles ahora mismo --</option>';
+            destinoSelect.disabled = true;
+            return;
+        }
+
+        destinoSelect.disabled = false;
+        destinoSelect.innerHTML = `<option value="">-- Elige un destino (${disponibles.length} opción${disponibles.length>1?'es':''}) --</option>` +
+            disponibles.map(r => {
+                const etiqueta = disponibles.filter(x => x.destino === r.destino).length > 1
+                    ? `${r.destino} (${r.nombre_completo}, S/ ${parseFloat(r.precio).toFixed(2)})`
+                    : `${r.destino} — S/ ${parseFloat(r.precio).toFixed(2)}`;
+                return `<option value="${r.id}">${etiqueta}</option>`;
+            }).join('');
+    }
+
+    static onDestinoChange(tipo) {
+        const destinoSelect = document.getElementById(`${tipo}DestinoSelect`);
+        const routeId = destinoSelect.value;
+        if (!routeId) return;
+
+        if (tipo === 'trip') {
+            UserPanel.selectTripRoute(parseInt(routeId, 10));
+        } else {
+            UserPanel.selectParcelRoute(parseInt(routeId, 10));
+        }
+
+        document.querySelector(`[data-route-id="${routeId}"]`)?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    }
+
     static async showParcelForm() {
         openModal('<i class="fas fa-box"></i> Nueva Encomienda', `<div id="parcelFormContainer"><div class="empty-state"><i class="fas fa-spinner fa-spin"></i> Cargando conductores disponibles...</div></div>`);
         try {
@@ -258,6 +334,7 @@ class UserPanel {
         <form id="parcelForm" onsubmit="UserPanel.saveParcel(event)">
             <input type="hidden" name="route_id" id="parcelSelectedRoute">
             <input type="hidden" name="conductor_id" id="parcelSelectedConductor">
+            ${UserPanel.buildOriginDestinoSelector(rutas, 'parcel')}
             <div class="form-group">
                 <label><i class="fas fa-car"></i> Elige un conductor disponible</label>
                 <div class="driver-card-list">${tarjetas}</div>
@@ -505,6 +582,7 @@ class UserPanel {
         <form id="tripForm" onsubmit="UserPanel.saveTrip(event)">
             <input type="hidden" name="route_id" id="tripSelectedRoute">
             <input type="hidden" name="conductor_id" id="tripSelectedConductor">
+            ${UserPanel.buildOriginDestinoSelector(rutas, 'trip')}
             <div class="form-group">
                 <label><i class="fas fa-car"></i> Elige un conductor disponible</label>
                 <div class="driver-card-list">${tarjetas}</div>
@@ -679,17 +757,17 @@ class UserPanel {
         ];
 
         if (tipo === 'encomienda') {
-            if (extras.descripcion) msgLines.push(`📦 Paquete: ${extras.descripcion}`);
-            if (extras.receptor)    msgLines.push(`👤 Receptor: ${extras.receptor}`);
-            if (extras.contacto_receptor) msgLines.push(`📞 Contacto receptor: ${extras.contacto_receptor}`);
+            if (extras.descripcion) msgLines.push(`Paquete: ${extras.descripcion}`);
+            if (extras.receptor)    msgLines.push(`Receptor: ${extras.receptor}`);
+            if (extras.contacto_receptor) msgLines.push(`Contacto receptor: ${extras.contacto_receptor}`);
         } else {
-            msgLines.push(`🧍 Pasajeros: ${extras.pasajeros}`);
-            if (extras.notas) msgLines.push(`📝 Notas: ${extras.notas}`);
+            msgLines.push(`Pasajeros: ${extras.pasajeros}`);
+            if (extras.notas) msgLines.push(`Notas: ${extras.notas}`);
         }
 
-        msgLines.push(`📍 Origen: ${origen}${mapsOrigen ? `\n🗺️ ${mapsOrigen}` : ''}`);
+        msgLines.push(`Origen: ${origen}${mapsOrigen ? `\n🗺️ ${mapsOrigen}` : ''}`);
         if (extras.ref_origen) msgLines.push(`   Ref. recojo: ${extras.ref_origen}`);
-        msgLines.push(`🏁 Destino: ${destino}${mapsDestino ? `\n🗺️ ${mapsDestino}` : ''}`);
+        msgLines.push(`Destino: ${destino}${mapsDestino ? `\n🗺️ ${mapsDestino}` : ''}`);
         if (extras.ref_destino) msgLines.push(`   Ref. entrega: ${extras.ref_destino}`);
 
         const mensaje = msgLines.join('\n');
@@ -857,4 +935,3 @@ class UserPanel {
         } catch(e) { showToast(e.message,'error'); }
     }
 }
-
