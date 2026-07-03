@@ -1,6 +1,5 @@
 const MapPicker = {
     _instances: {},
-
     _defaultCenter: { lat: -5.1945, lng: -80.6328 },
     _defaultZoom: 13,
 
@@ -8,6 +7,22 @@ const MapPicker = {
         return typeof google !== 'undefined' && google.maps && google.maps.places;
     },
 
+    /**
+     * Dibuja el selector dentro del elemento con id = containerId.
+     * opts.fieldPrefix define el nombre de los inputs ocultos generados
+     * (ej: "origin" -> origin_lat, origin_lng) y debe coincidir con lo
+     * que el backend espera en orderController.js.
+     * opts.addressFieldName es el name del input de texto visible que ya
+     * existe en el formulario (la dirección); si se pasa, el autocompletado
+     * escribe ahí en vez de crear un input nuevo.
+     * opts.onPlaceChanged(place) es un callback opcional.
+     *
+     * DISEÑO MOBILE-FIRST: el mapa visual (Google Maps de verdad, con pin
+     * arrastrable) NO se muestra por defecto — solo aparece si el usuario
+     * toca "Abrir mapa". Por defecto solo se ve el buscador de texto y un
+     * botón "Usar mi ubicación actual" (GPS del navegador/celular). Esto
+     * hace el formulario mucho más liviano y rápido de usar en celulares.
+     */
     render(containerId, opts = {}) {
         const container = document.getElementById(containerId);
         if (!container) return;
@@ -24,6 +39,8 @@ const MapPicker = {
             return;
         }
 
+        const ocultarGps = opts.showGpsButton === false;
+
         container.innerHTML = `
             <div class="map-picker">
                 <div class="map-picker-search">
@@ -31,9 +48,10 @@ const MapPicker = {
                     <input type="text" class="form-control map-picker-input" placeholder="Busca una dirección..." autocomplete="off">
                 </div>
                 <div class="map-picker-actions">
+                    ${ocultarGps ? '' : `
                     <button type="button" class="btn btn-secondary btn-sm map-picker-gps-btn">
                         <i class="fas fa-location-arrow"></i> Usar mi ubicación actual
-                    </button>
+                    </button>`}
                     <button type="button" class="btn btn-link btn-sm map-picker-toggle-btn">
                         <i class="fas fa-map"></i> Abrir mapa para ajustar el punto
                     </button>
@@ -52,7 +70,7 @@ const MapPicker = {
         const lngInput = container.querySelector(`[name="${prefix}_lng"]`);
         const mapWrapper = container.querySelector(`#${containerId}_wrapper`);
         const mapDiv = container.querySelector(`#${containerId}_canvas`);
-        const gpsBtn = container.querySelector('.map-picker-gps-btn');
+        const gpsBtn = container.querySelector('.map-picker-gps-btn'); // null si ocultarGps
         const toggleBtn = container.querySelector('.map-picker-toggle-btn');
 
         const center = opts.initialLat && opts.initialLng
@@ -129,7 +147,7 @@ const MapPicker = {
             }
         });
 
-        gpsBtn.addEventListener('click', () => {
+        if (gpsBtn) gpsBtn.addEventListener('click', () => {
             if (!navigator.geolocation) {
                 showToast('Tu navegador no permite obtener la ubicación actual.', 'error');
                 return;
