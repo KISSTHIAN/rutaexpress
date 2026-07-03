@@ -117,15 +117,6 @@ class RouteConfigController {
 
     static async obtenerRutasDisponibles(req, res) {
         try {
-            // NOTA IMPORTANTE: "vehiculos" NO tiene una relación directa
-            // (foreign key) con "configuracion_rutas" en la base de datos —
-            // solo está relacionada con "conductores" (vehiculos.conductor_id
-            // → conductores.id). Pedirle a Supabase/PostgREST que la incluya
-            // aquí como si estuvieran conectadas directamente hacía que la
-            // consulta fallara con error 500 ("no se pudo encontrar la
-            // relación entre configuracion_rutas y vehiculos"), que es
-            // exactamente el error que estabas viendo. Por eso el vehículo
-            // se trae por separado más abajo, usando el id del conductor.
             const { data, error } = await supabase
                 .from('configuracion_rutas')
                 .select(`
@@ -154,9 +145,6 @@ class RouteConfigController {
 
             const conductorIds = [...new Set(rutasFiltradas.map(r => r.conductores?.id).filter(Boolean))];
 
-            // Vehículo de cada conductor (una sola consulta para todos).
-            // Se asume un vehículo por conductor; si tuviera varios, se usa
-            // el primero encontrado.
             let vehiculoPorConductorId = {};
             if (conductorIds.length > 0) {
                 const { data: vehiculosData, error: vehError } = await supabase
