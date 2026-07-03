@@ -1,27 +1,13 @@
 const MapPicker = {
     _instances: {},
-    _defaultCenter: { lat: -8.1116, lng: -79.0288 },
+
+    _defaultCenter: { lat: -5.1945, lng: -80.6328 },
+    _defaultZoom: 13,
 
     isGoogleMapsReady() {
         return typeof google !== 'undefined' && google.maps && google.maps.places;
     },
 
-    /**
-     * Dibuja el selector dentro del elemento con id = containerId.
-     * opts.fieldPrefix define el nombre de los inputs ocultos generados
-     * (ej: "origin" -> origin_lat, origin_lng) y debe coincidir con lo
-     * que el backend espera en orderController.js.
-     * opts.addressFieldName es el name del input de texto visible que ya
-     * existe en el formulario (la dirección); si se pasa, el autocompletado
-     * escribe ahí en vez de crear un input nuevo.
-     * opts.onPlaceChanged(place) es un callback opcional.
-     *
-     * DISEÑO MOBILE-FIRST: el mapa visual (Google Maps de verdad, con pin
-     * arrastrable) NO se muestra por defecto — solo aparece si el usuario
-     * toca "Abrir mapa". Por defecto solo se ve el buscador de texto y un
-     * botón "Usar mi ubicación actual" (GPS del navegador/celular). Esto
-     * hace el formulario mucho más liviano y rápido de usar en celulares.
-     */
     render(containerId, opts = {}) {
         const container = document.getElementById(containerId);
         if (!container) return;
@@ -81,15 +67,20 @@ const MapPicker = {
         if (opts.initialLat && opts.initialLng) {
             setCoords(opts.initialLat, opts.initialLng);
         }
+
         let mapInstance = null;
         let markerInstance = null;
+
+        function estaFueraDePiura(lat, lng) {
+            return lat < -5.90 || lat > -4.05 || lng < -81.35 || lng > -79.20;
+        }
 
         function ensureMapCreated(atLocation) {
             if (mapInstance) return mapInstance;
 
             mapInstance = new google.maps.Map(mapDiv, {
                 center: atLocation || center,
-                zoom: atLocation ? 16 : 13,
+                zoom: atLocation ? 16 : MapPicker._defaultZoom,
                 mapTypeControl: false,
                 streetViewControl: false,
                 fullscreenControl: true
@@ -170,6 +161,10 @@ const MapPicker = {
                         setTimeout(() => {
                             gpsBtn.innerHTML = '<i class="fas fa-location-arrow"></i> Usar mi ubicación actual';
                         }, 2500);
+
+                        if (estaFueraDePiura(loc.lat, loc.lng)) {
+                            showToast('Tu ubicación actual parece estar fuera de Piura. Verifica el punto en el mapa.', 'warning');
+                        }
                     });
 
                     if (typeof opts.onPlaceChanged === 'function') {
@@ -196,7 +191,8 @@ const MapPicker = {
         const autocomplete = new google.maps.places.Autocomplete(searchInput, {
             fields: ['geometry', 'formatted_address', 'name'],
             componentRestrictions: { country: 'pe' },
-            bounds: piuraBounds
+            bounds: piuraBounds,
+            strictBounds: true
         });
 
         autocomplete.addListener('place_changed', () => {
@@ -280,4 +276,3 @@ const MapPicker = {
         return `https://www.google.com/maps?q=${lat},${lng}`;
     }
 };
-
