@@ -269,9 +269,14 @@ class OrderController {
             const cantidadSolicitada = parseInt(passenger_count, 10) || 1;
 
             if (route_id) {
+                // Igual que en routeConfigController: "vehiculos" no tiene
+                // relación directa con "configuracion_rutas" en la base de
+                // datos, así que no se puede pedir como embed aquí (rompía
+                // la consulta con un error que se traducía en este mismo
+                // 400 "La ruta seleccionada ya no está disponible").
                 const { data: ruta, error: rutaError } = await supabase
                     .from('configuracion_rutas')
-                    .select('id, origen, destino, conductor_id, estado, conductores(nombre_completo, telefono_1, whatsapp), vehiculos(capacidad)')
+                    .select('id, origen, destino, conductor_id, estado, conductores(nombre_completo, telefono_1, whatsapp)')
                     .eq('id', route_id)
                     .eq('estado', 'activo')
                     .single();
@@ -280,7 +285,14 @@ class OrderController {
                     return res.status(400).json({ success: false, message: 'La ruta seleccionada ya no está disponible' });
                 }
 
-                const capacidad = ruta.vehiculos?.[0]?.capacidad ? parseInt(ruta.vehiculos[0].capacidad, 10) : null;
+                const { data: vehiculoRuta } = await supabase
+                    .from('vehiculos')
+                    .select('capacidad')
+                    .eq('conductor_id', ruta.conductor_id)
+                    .limit(1)
+                    .maybeSingle();
+
+                const capacidad = vehiculoRuta?.capacidad ? parseInt(vehiculoRuta.capacidad, 10) : null;
                 if (capacidad !== null) {
                     const { data: viajesActivos, error: viajesError } = await supabase
                         .from('viajes')
