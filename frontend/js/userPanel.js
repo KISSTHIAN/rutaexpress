@@ -195,14 +195,6 @@ class UserPanel {
         } catch(e) { showToast('Error al cargar encomiendas','error'); }
     }
 
-    /**
-     * Genera el selector guiado "Origen -> Destino": el cliente elige
-     * primero un origen (de la lista real de orígenes que ofrecen los
-     * conductores) y el campo Destino se llena solo con los destinos
-     * reales disponibles desde ese origen — así el cliente nunca ve una
-     * combinación que ningún conductor ofrece. Funciona para 'parcel' y
-     * 'trip' usando el mismo cache de rutas (_parcelRoutesCache / _tripRoutesCache).
-     */
     static buildOriginDestinoSelector(rutas, tipo) {
         const rutasConOrigen = rutas.filter(r => !r.sin_ruta && r.origen && r.destino);
         if (rutasConOrigen.length === 0) return '';
@@ -240,8 +232,6 @@ class UserPanel {
             return;
         }
 
-        // Rutas que salen de ese origen (puede haber varios conductores
-        // ofreciendo el mismo destino, o destinos distintos).
         const disponibles = cache.filter(r => !r.sin_ruta && r.origen === origen && !r.vehiculo_lleno);
 
         if (disponibles.length === 0) {
@@ -270,9 +260,6 @@ class UserPanel {
         } else {
             UserPanel.selectParcelRoute(parseInt(routeId, 10));
         }
-
-        // Llevar la vista hacia la tarjeta del conductor seleccionado,
-        // para que el cliente vea la confirmación visual.
         document.querySelector(`[data-route-id="${routeId}"]`)?.scrollIntoView({ behavior: 'smooth', block: 'center' });
     }
 
@@ -282,6 +269,7 @@ class UserPanel {
             const data = await apiCall('/route-config/routes/available');
             const rutas = data.data || [];
             document.getElementById('parcelFormContainer').innerHTML = UserPanel.buildParcelFormHTML(rutas);
+            MapPicker.attachQuickSearch(document.getElementById('parcelDestinationText'), { fieldPrefix: 'destination' });
         } catch(e) {
             document.getElementById('parcelFormContainer').innerHTML = `
             <div class="alert alert-danger"><i class="fas fa-exclamation-circle"></i> No se pudieron cargar las rutas.</div>
@@ -414,8 +402,6 @@ class UserPanel {
             </div>`;
         }
 
-        // Sin ruta fija, el origen/destino exacto es obligatorio porque no
-        // hay ruta de la cual tomarlo por defecto.
         document.getElementById('parcelOriginText')?.setAttribute('required', 'required');
         document.getElementById('parcelDestinationText')?.setAttribute('required', 'required');
 
@@ -448,6 +434,7 @@ class UserPanel {
         setTimeout(() => {
             MapPicker.render('mapParcelOrigin', { fieldPrefix: 'origin', addressFieldName: 'origin' });
             MapPicker.render('mapParcelDestination', { fieldPrefix: 'destination', addressFieldName: 'destination', showGpsButton: false });
+            MapPicker.attachQuickSearch(document.getElementById('parcelDestinationText'), { fieldPrefix: 'destination' });
         }, 300);
     }
 
@@ -524,6 +511,7 @@ class UserPanel {
             const data = await apiCall('/route-config/routes/available');
             const rutas = data.data || [];
             document.getElementById('tripFormContainer').innerHTML = UserPanel.buildTripFormHTML(rutas);
+            MapPicker.attachQuickSearch(document.getElementById('tripDestinationText'), { fieldPrefix: 'destination' });
         } catch(e) {
             document.getElementById('tripFormContainer').innerHTML = `
             <div class="alert alert-danger"><i class="fas fa-exclamation-circle"></i> No se pudieron cargar las rutas.</div>
@@ -688,7 +676,7 @@ class UserPanel {
             </div>
             <div class="form-group">
                 <label><i class="fas fa-map-marker-alt" style="color:var(--danger)"></i> Destino</label>
-                <input type="text" name="destination" class="form-control" required placeholder="Dirección de destino">
+                <input type="text" name="destination" id="tripDestinationText" class="form-control" required placeholder="Dirección de destino">
                 <div id="mapTripDestination" style="margin-top:8px"></div>
             </div>
             <div class="form-group"><label>Hora de salida</label>${TimePicker.render('departure_time_manual')}</div>
@@ -699,6 +687,7 @@ class UserPanel {
         setTimeout(() => {
             MapPicker.render('mapTripOrigin', { fieldPrefix: 'origin', addressFieldName: 'origin' });
             MapPicker.render('mapTripDestination', { fieldPrefix: 'destination', addressFieldName: 'destination', showGpsButton: false });
+            MapPicker.attachQuickSearch(document.getElementById('tripDestinationText'), { fieldPrefix: 'destination' });
         }, 300);
     }
 
@@ -758,21 +747,21 @@ class UserPanel {
 
         let msgLines = [
             `*Nuevo ${tipo === 'encomienda' ? 'pedido de encomienda' : 'viaje'} — Ruta Express*`,
-            `Cliente: ${user?.username || 'Usuario'}`,
+            `*Cliente:* ${user?.username || 'Usuario'}`,
         ];
 
         if (tipo === 'encomienda') {
-            if (extras.descripcion) msgLines.push(`Paquete: ${extras.descripcion}`);
-            if (extras.receptor)    msgLines.push(`Receptor: ${extras.receptor}`);
-            if (extras.contacto_receptor) msgLines.push(`Contacto receptor: ${extras.contacto_receptor}`);
+            if (extras.descripcion) msgLines.push(`*Paquete:* ${extras.descripcion}`);
+            if (extras.receptor)    msgLines.push(`*Receptor:* ${extras.receptor}`);
+            if (extras.contacto_receptor) msgLines.push(`*Contacto receptor:* ${extras.contacto_receptor}`);
         } else {
-            msgLines.push(`Pasajeros: ${extras.pasajeros}`);
-            if (extras.notas) msgLines.push(`Notas: ${extras.notas}`);
+            msgLines.push(`*Pasajeros:* ${extras.pasajeros}`);
+            if (extras.notas) msgLines.push(`*Notas:* ${extras.notas}`);
         }
 
-        msgLines.push(`Origen: ${origen}${mapsOrigen ? `\n🗺️ ${mapsOrigen}` : ''}`);
+        msgLines.push(`*Origen:* ${origen}${mapsOrigen ? `\n*Ubicación:* ${mapsOrigen}` : ''}`);
         if (extras.ref_origen) msgLines.push(`   Ref. recojo: ${extras.ref_origen}`);
-        msgLines.push(`Destino: ${destino}${mapsDestino ? `\n🗺️ ${mapsDestino}` : ''}`);
+        msgLines.push(`*Destino:* ${destino}${mapsDestino ? `\n*Ubicación:* ${mapsDestino}` : ''}`);
         if (extras.ref_destino) msgLines.push(`   Ref. entrega: ${extras.ref_destino}`);
 
         const mensaje = msgLines.join('\n');
