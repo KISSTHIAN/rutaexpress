@@ -6,23 +6,55 @@ const MapPicker = {
     isGoogleMapsReady() {
         return typeof google !== 'undefined' && google.maps && google.maps.places;
     },
+    _ensureHiddenField(form, name) {
+        if (!form) return null;
+        let el = form.querySelector(`input[type="hidden"][name="${name}"]`);
+        if (!el) {
+            el = document.createElement('input');
+            el.type = 'hidden';
+            el.name = name;
+            form.appendChild(el);
+        }
+        return el;
+    },
 
-    /**
-     * Dibuja el selector dentro del elemento con id = containerId.
-     * opts.fieldPrefix define el nombre de los inputs ocultos generados
-     * (ej: "origin" -> origin_lat, origin_lng) y debe coincidir con lo
-     * que el backend espera en orderController.js.
-     * opts.addressFieldName es el name del input de texto visible que ya
-     * existe en el formulario (la dirección); si se pasa, el autocompletado
-     * escribe ahí en vez de crear un input nuevo.
-     * opts.onPlaceChanged(place) es un callback opcional.
-     *
-     * DISEÑO MOBILE-FIRST: el mapa visual (Google Maps de verdad, con pin
-     * arrastrable) NO se muestra por defecto — solo aparece si el usuario
-     * toca "Abrir mapa". Por defecto solo se ve el buscador de texto y un
-     * botón "Usar mi ubicación actual" (GPS del navegador/celular). Esto
-     * hace el formulario mucho más liviano y rápido de usar en celulares.
-     */
+    _piuraBounds() {
+        return new google.maps.LatLngBounds(
+            { lat: -5.90, lng: -81.35 }, // suroeste
+            { lat: -4.05, lng: -79.20 }  // noreste
+        );
+    },
+
+    attachQuickSearch(inputEl, opts = {}) {
+        if (!inputEl || !MapPicker.isGoogleMapsReady()) return null;
+
+        const form = inputEl.closest('form');
+        const prefix = opts.fieldPrefix;
+        const latInput = prefix ? MapPicker._ensureHiddenField(form, `${prefix}_lat`) : null;
+        const lngInput = prefix ? MapPicker._ensureHiddenField(form, `${prefix}_lng`) : null;
+
+        const autocomplete = new google.maps.places.Autocomplete(inputEl, {
+            fields: ['geometry', 'formatted_address', 'name'],
+            componentRestrictions: { country: 'pe' },
+            bounds: MapPicker._piuraBounds(),
+            strictBounds: true
+        });
+
+        autocomplete.addListener('place_changed', () => {
+            const place = autocomplete.getPlace();
+            if (!place.geometry || !place.geometry.location) return;
+
+            const loc = place.geometry.location;
+            if (latInput) latInput.value = loc.lat();
+            if (lngInput) lngInput.value = loc.lng();
+            inputEl.value = place.formatted_address || place.name || inputEl.value;
+
+            if (typeof opts.onPlaceChanged === 'function') opts.onPlaceChanged(place);
+        });
+
+        return autocomplete;
+    },
+
     render(containerId, opts = {}) {
         const container = document.getElementById(containerId);
         if (!container) return;
@@ -61,13 +93,11 @@ const MapPicker = {
                     <p class="map-picker-hint"><i class="fas fa-hand-pointer"></i> Puedes arrastrar el marcador para ajustar el punto exacto</p>
                 </div>
             </div>
-            <input type="hidden" name="${prefix}_lat">
-            <input type="hidden" name="${prefix}_lng">
         `;
 
         const searchInput = container.querySelector('.map-picker-input');
-        const latInput = container.querySelector(`[name="${prefix}_lat"]`);
-        const lngInput = container.querySelector(`[name="${prefix}_lng"]`);
+        const latInput = MapPicker._ensureHiddenField(form, `${prefix}_lat`);
+        const lngInput = MapPicker._ensureHiddenField(form, `${prefix}_lng`);
         const mapWrapper = container.querySelector(`#${containerId}_wrapper`);
         const mapDiv = container.querySelector(`#${containerId}_canvas`);
         const gpsBtn = container.querySelector('.map-picker-gps-btn'); // null si ocultarGps
@@ -132,7 +162,7 @@ const MapPicker = {
                 mapInstance.setZoom(16);
                 markerInstance.setPosition(atLocation);
             }
-
+ 
             setTimeout(() => google.maps.event.trigger(mapInstance, 'resize'), 50);
         }
 
@@ -201,15 +231,10 @@ const MapPicker = {
             );
         });
 
-        const piuraBounds = new google.maps.LatLngBounds(
-            { lat: -5.90, lng: -81.35 }, // suroeste
-            { lat: -4.05, lng: -79.20 }  // noreste
-        );
-
         const autocomplete = new google.maps.places.Autocomplete(searchInput, {
             fields: ['geometry', 'formatted_address', 'name'],
             componentRestrictions: { country: 'pe' },
-            bounds: piuraBounds,
+            bounds: MapPicker._piuraBounds(),
             strictBounds: true
         });
 
@@ -282,13 +307,11 @@ const MapPicker = {
 
     },
 
-    /** Útil si necesitas forzar Google Maps a redibujar tras mostrar un modal oculto */
     invalidateSize(containerId) {
         const instance = MapPicker._instances[containerId];
         if (instance) google.maps.event.trigger(instance.map, 'resize');
     },
 
-    /** Genera un enlace de Google Maps a partir de lat/lng, para compartir por WhatsApp */
     buildMapsLink(lat, lng) {
         if (!lat || !lng) return null;
         return `https://www.google.com/maps?q=${lat},${lng}`;
