@@ -383,8 +383,22 @@ body {
     text-align: center;
     border-bottom: 1px solid rgba(255,255,255,0.1);
     color: white;
+    flex-shrink: 0;
 }
-.sidebar-nav { flex: 1; padding: 16px 12px; }
+.sidebar-nav {
+    flex: 1;
+    padding: 16px 12px;
+    /* Antes, si había muchas opciones de menú (Rutas, Pedidos, Historial,
+       Reseñas, Suscripción, Ajustes, etc.), no cabían en pantallas de
+       poca altura y empujaban el botón de "Cerrar Sesión" (que va después,
+       en .sidebar-footer) fuera de la vista, sin ninguna forma de hacer
+       scroll para alcanzarlo. Con "overflow-y: auto" aquí, solo esta
+       lista de opciones hace scroll internamente cuando no cabe, mientras
+       el logo (arriba) y el botón de cerrar sesión (abajo) quedan siempre
+       visibles y fijos.
+    */
+    overflow-y: auto;
+}
 .sidebar-nav a {
     display: flex;
     align-items: center;
@@ -405,6 +419,7 @@ body {
 .sidebar-footer {
     padding: 16px 12px;
     border-top: 1px solid rgba(255,255,255,0.1);
+    flex-shrink: 0;
 }
 .sidebar-user {
     display: flex;
@@ -778,8 +793,7 @@ tbody tr:hover { background: var(--primary-50); }
 }
 .mobile-overlay.active { display: block; }
 
-/* Hacer que cualquier tabla generada por JS pueda desplazarse en horizontal
-   sin romper el layout, en vez de desbordar la pantalla en móvil */
+
 .section-content-wrapper table { display: block; overflow-x: auto; white-space: nowrap; }
 .section-content-wrapper thead, .section-content-wrapper tbody, .section-content-wrapper tr { display: table; width: 100%; table-layout: fixed; }
 
@@ -854,9 +868,6 @@ tbody tr:hover { background: var(--primary-50); }
     .stats-grid { grid-template-columns: 1fr; }
     .auth-form-wrapper { padding: 24px 18px; }
 }
-/* ============================================================
-   RUTA EXPRESS v4 — Estilos adicionales
-   ============================================================ */
 
 /* ---- Tarjetas de conductor disponible ---- */
 .driver-card-list { display: flex; flex-direction: column; gap: 10px; margin-bottom: 16px; }
