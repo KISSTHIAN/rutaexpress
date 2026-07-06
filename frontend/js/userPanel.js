@@ -195,72 +195,55 @@ class UserPanel {
         } catch(e) { showToast('Error al cargar encomiendas','error'); }
     }
 
-    static buildOriginDestinoSelector(rutas, tipo) {
-        const rutasConOrigen = rutas.filter(r => !r.sin_ruta && r.origen && r.destino);
-        if (rutasConOrigen.length === 0) return '';
-
-        const origenes = [...new Set(rutasConOrigen.map(r => r.origen))].sort();
+    /**
+     * Buscador de ORIGEN (texto libre, no una lista fija): el cliente
+     * escribe el lugar de origen (ej. "Piura") y, por coincidencia de
+     * texto, se filtran las tarjetas de conductores que tienen ese origen
+     * en su ruta. Ya NO se pide destino por separado — el destino queda
+     * definido por la ruta de cada conductor (ej. Piura → Ayabaca) y se ve
+     * directamente en su tarjeta.
+     */
+    static buildOriginOnlySelector(rutas, tipo) {
+        if (!rutas.length) return '';
 
         return `
         <div class="form-group">
-            <label><i class="fas fa-map-marker-alt" style="color:var(--primary)"></i> Origen</label>
-            <select id="${tipo}OriginSelect" class="form-control" onchange="UserPanel.onOriginChange('${tipo}')">
-                <option value="">-- Elige un origen --</option>
-                ${origenes.map(o => `<option value="${o.replace(/"/g,'&quot;')}">${o}</option>`).join('')}
-            </select>
-        </div>
-        <div class="form-group">
-            <label><i class="fas fa-map-marker-alt" style="color:var(--danger)"></i> Destino</label>
-            <select id="${tipo}DestinoSelect" class="form-control" onchange="UserPanel.onDestinoChange('${tipo}')" disabled>
-                <option value="">-- Primero elige un origen --</option>
-            </select>
+            <label><i class="fas fa-map-marker-alt" style="color:var(--primary)"></i> Buscar por origen</label>
+            <input type="text" id="${tipo}OriginSearch" class="form-control"
+                   placeholder="Escribe el lugar de origen (ej: Piura)..."
+                   oninput="UserPanel.filterDriversByOrigin('${tipo}')" autocomplete="off">
         </div>
         <p class="form-hint" style="margin:-8px 0 12px;color:var(--text-secondary);font-size:.85em">
-            <i class="fas fa-info-circle"></i> O elige directamente un conductor de la lista de abajo.
+            <i class="fas fa-info-circle"></i> Aparecerán los conductores cuya ruta salga desde ese origen.
         </p>`;
     }
 
-    static onOriginChange(tipo) {
-        const origenSelect = document.getElementById(`${tipo}OriginSelect`);
-        const destinoSelect = document.getElementById(`${tipo}DestinoSelect`);
-        const origen = origenSelect.value;
-        const cache = tipo === 'trip' ? UserPanel._tripRoutesCache : UserPanel._parcelRoutesCache;
+    static filterDriversByOrigin(tipo) {
+        const query = (document.getElementById(`${tipo}OriginSearch`)?.value || '').trim().toLowerCase();
+        const listId = tipo === 'trip' ? 'tripDriverList' : 'parcelDriverList';
+        const cards = document.querySelectorAll(`#${listId} .driver-card`);
+        let visibles = 0;
 
-        if (!origen) {
-            destinoSelect.innerHTML = '<option value="">-- Primero elige un origen --</option>';
-            destinoSelect.disabled = true;
-            return;
+        cards.forEach(card => {
+            const origen = (card.getAttribute('data-origen') || '').toLowerCase();
+            const coincide = !query || origen.includes(query);
+            card.style.display = coincide ? '' : 'none';
+            if (coincide) visibles++;
+        });
+
+        const list = document.getElementById(listId);
+        let vacio = list.parentElement.querySelector('.driver-list-empty');
+        if (visibles === 0 && query) {
+            if (!vacio) {
+                vacio = document.createElement('div');
+                vacio.className = 'driver-list-empty alert alert-info';
+                vacio.style.marginTop = '8px';
+                vacio.innerHTML = `<i class="fas fa-info-circle"></i> Ningún conductor sale desde "${query}" ahora mismo.`;
+                list.insertAdjacentElement('afterend', vacio);
+            }
+        } else if (vacio) {
+            vacio.remove();
         }
-
-        const disponibles = cache.filter(r => !r.sin_ruta && r.origen === origen && !r.vehiculo_lleno);
-
-        if (disponibles.length === 0) {
-            destinoSelect.innerHTML = '<option value="">-- Sin destinos disponibles ahora mismo --</option>';
-            destinoSelect.disabled = true;
-            return;
-        }
-
-        destinoSelect.disabled = false;
-        destinoSelect.innerHTML = `<option value="">-- Elige un destino (${disponibles.length} opción${disponibles.length>1?'es':''}) --</option>` +
-            disponibles.map(r => {
-                const etiqueta = disponibles.filter(x => x.destino === r.destino).length > 1
-                    ? `${r.destino} (${r.nombre_completo}, S/ ${parseFloat(r.precio).toFixed(2)})`
-                    : `${r.destino} — S/ ${parseFloat(r.precio).toFixed(2)}`;
-                return `<option value="${r.id}">${etiqueta}</option>`;
-            }).join('');
-    }
-
-    static onDestinoChange(tipo) {
-        const destinoSelect = document.getElementById(`${tipo}DestinoSelect`);
-        const routeId = destinoSelect.value;
-        if (!routeId) return;
-
-        if (tipo === 'trip') {
-            UserPanel.selectTripRoute(parseInt(routeId, 10));
-        } else {
-            UserPanel.selectParcelRoute(parseInt(routeId, 10));
-        }
-        document.querySelector(`[data-route-id="${routeId}"]`)?.scrollIntoView({ behavior: 'smooth', block: 'center' });
     }
 
     static async showParcelForm() {
@@ -269,68 +252,52 @@ class UserPanel {
             const data = await apiCall('/route-config/routes/available');
             const rutas = data.data || [];
             document.getElementById('parcelFormContainer').innerHTML = UserPanel.buildParcelFormHTML(rutas);
-            MapPicker.attachQuickSearch(document.getElementById('parcelDestinationText'), { fieldPrefix: 'destination' });
         } catch(e) {
             document.getElementById('parcelFormContainer').innerHTML = `
-            <div class="alert alert-danger"><i class="fas fa-exclamation-circle"></i> No se pudieron cargar las rutas.</div>
-            <button class="btn btn-secondary btn-block" onclick="UserPanel.showParcelManualForm()">Continuar sin ruta</button>`;
+            <div class="alert alert-danger"><i class="fas fa-exclamation-circle"></i> No se pudieron cargar los conductores disponibles. Intenta de nuevo en un momento.</div>`;
         }
     }
 
     static _parcelRoutesCache = [];
 
     static buildParcelFormHTML(rutas) {
-        UserPanel._parcelRoutesCache = rutas;
-        if (!rutas.length) {
-            return `<div class="alert alert-info"><i class="fas fa-info-circle"></i> No hay conductores disponibles en este momento.</div>
-            <button class="btn btn-secondary btn-block" onclick="UserPanel.showParcelManualForm()">Continuar con origen/destino manual</button>`;
+        // Solo interesan conductores CON ruta fija: el destino ya no se
+        // busca ni se ajusta a mano — se toma directo de la ruta elegida
+        // (ej. Piura → Ayabaca). Los conductores "sin ruta" necesitarían
+        // que el cliente escriba el destino manualmente, así que ya no se
+        // muestran aquí.
+        const rutasConRuta = rutas.filter(r => !r.sin_ruta);
+        UserPanel._parcelRoutesCache = rutasConRuta;
+
+        if (!rutasConRuta.length) {
+            return `<div class="alert alert-info"><i class="fas fa-info-circle"></i> No hay conductores disponibles en este momento. Intenta de nuevo más tarde.</div>`;
         }
 
-        const tarjetas = rutas.map(r => {
-            if (r.sin_ruta) {
-                return `
-                <div class="driver-card" data-conductor-id="${r.conductor_id}"
-                     onclick="UserPanel.selectParcelDriver(${r.conductor_id})" style="cursor:pointer">
-                    <div class="driver-card-info">
-                        <div class="driver-card-name"><i class="fas fa-user-circle"></i> ${r.nombre_completo||'Conductor'}</div>
-                        <div class="driver-card-meta">
-                            <span><i class="fas fa-route"></i> Sin ruta fija — tú indicas origen y destino</span>
-                            ${r.placa ? `<span><i class="fas fa-car"></i> ${r.placa}</span>` : ''}
-                            ${r.capacidad_vehiculo ? `<span><i class="fas fa-users"></i> ${r.capacidad_vehiculo} asientos</span>` : ''}
-                        </div>
-                        <div class="driver-card-rating">${Ratings.renderStars(r.rating_promedio, r.rating_total)}</div>
-                    </div>
-                    <span class="badge badge-success"><i class="fas fa-circle"></i> Disponible</span>
-                </div>`;
-            }
-            return `
-            <div class="driver-card ${r.vehiculo_lleno ? 'driver-card-full' : ''}" data-route-id="${r.id}"
+        // Tarjeta simplificada: solo nombre, ruta, placa y reseñas (estrellas).
+        const tarjetas = rutasConRuta.map(r => `
+            <div class="driver-card ${r.vehiculo_lleno ? 'driver-card-full' : ''}" data-route-id="${r.id}" data-origen="${r.origen}"
                  onclick="${r.vehiculo_lleno ? '' : `UserPanel.selectParcelRoute(${r.id})`}"
                  style="${r.vehiculo_lleno ? 'opacity:.55;cursor:not-allowed' : 'cursor:pointer'}">
                 <div class="driver-card-info">
                     <div class="driver-card-name"><i class="fas fa-user-circle"></i> ${r.nombre_completo||'Conductor'}</div>
                     <div class="driver-card-meta">
                         <span><i class="fas fa-map-marker-alt"></i> ${r.origen} → ${r.destino}</span>
-                        <span><i class="fas fa-tag"></i> S/ ${parseFloat(r.precio).toFixed(2)}</span>
                         ${r.placa ? `<span><i class="fas fa-car"></i> ${r.placa}</span>` : ''}
-                        ${r.capacidad_vehiculo ? `<span><i class="fas fa-users"></i> ${r.asientos_disponibles} de ${r.capacidad_vehiculo} asientos</span>` : ''}
                     </div>
                     <div class="driver-card-rating">${Ratings.renderStars(r.rating_promedio, r.rating_total)}</div>
                 </div>
                 ${r.vehiculo_lleno
                     ? `<span class="badge badge-danger"><i class="fas fa-ban"></i> Vehículo lleno</span>`
                     : `<span class="badge badge-success"><i class="fas fa-circle"></i> Disponible</span>`}
-            </div>`;
-        }).join('');
+            </div>`).join('');
 
         return `
         <form id="parcelForm" onsubmit="UserPanel.saveParcel(event)">
             <input type="hidden" name="route_id" id="parcelSelectedRoute">
-            <input type="hidden" name="conductor_id" id="parcelSelectedConductor">
-            ${UserPanel.buildOriginDestinoSelector(rutas, 'parcel')}
+            ${UserPanel.buildOriginOnlySelector(rutasConRuta, 'parcel')}
             <div class="form-group">
                 <label><i class="fas fa-car"></i> Elige un conductor disponible</label>
-                <div class="driver-card-list">${tarjetas}</div>
+                <div class="driver-card-list" id="parcelDriverList">${tarjetas}</div>
                 <div id="parcelRouteInfo"></div>
             </div>
             <div class="form-group">
@@ -344,30 +311,18 @@ class UserPanel {
                 <div id="mapParcelOrigin" style="margin-top:8px"></div>
             </div>
 
-            <div class="form-group">
-                <label><i class="fas fa-map-marker-alt" style="color:var(--danger)"></i> Punto exacto de entrega</label>
-                <input type="text" name="destination" id="parcelDestinationText" class="form-control" placeholder="Dirección de entrega...">
-                <div id="mapParcelDestination" style="margin-top:8px"></div>
-            </div>
-
-            <div class="grid-2">
-                <div class="form-group"><label>Referencia de recojo</label><input type="text" name="origin_reference" class="form-control" placeholder="Ej: frente al parque, 2do piso"></div>
-                <div class="form-group"><label>Referencia de entrega</label><input type="text" name="destination_reference" class="form-control" placeholder="Ej: casa verde, dejar en portería"></div>
-            </div>
             <div class="grid-2">
                 <div class="form-group"><label>Nombre de quien recibe <span class="text-danger">*</span></label><input type="text" name="receiver_name" class="form-control" required></div>
-                <div class="form-group"><label>Contacto de quien recibe</label><input type="tel" name="receiver_contact" class="form-control" placeholder="Celular (opcional)"></div>
+                <div class="form-group"><label>Contacto de quien recibe <span class="text-danger">*</span></label><input type="tel" name="receiver_contact" class="form-control" required placeholder="Celular"></div>
             </div>
             <button type="submit" class="btn btn-primary btn-block"><i class="fas fa-paper-plane"></i> Crear Encomienda</button>
-        </form>
-        <div class="auth-link" style="margin-top:10px"><a href="#" onclick="UserPanel.showParcelManualForm();return false;">Prefiero ingresar origen/destino manualmente</a></div>`;
+        </form>`;
     }
 
     static selectParcelRoute(routeId) {
         document.querySelectorAll('.driver-card').forEach(c => c.classList.remove('driver-card-selected'));
         document.querySelector(`[data-route-id="${routeId}"]`)?.classList.add('driver-card-selected');
         document.getElementById('parcelSelectedRoute').value = routeId;
-        document.getElementById('parcelSelectedConductor').value = '';
 
         const ruta = UserPanel._parcelRoutesCache.find(r => String(r.id) === String(routeId));
         const info = document.getElementById('parcelRouteInfo');
@@ -378,71 +333,20 @@ class UserPanel {
             </div>`;
         }
 
-        document.getElementById('parcelOriginText')?.removeAttribute('required');
-        document.getElementById('parcelDestinationText')?.removeAttribute('required');
-
+        // El punto exacto de RECOJO sigue siendo útil (el conductor necesita
+        // saber dónde exactamente pasar por el paquete dentro de la ciudad
+        // de origen). El destino YA NO se pide: es directamente el de la
+        // ruta elegida (ej. Ayabaca), sin dirección ni mapa adicional.
         setTimeout(() => {
             MapPicker.render('mapParcelOrigin', { fieldPrefix: 'origin', addressFieldName: 'origin' });
-            MapPicker.render('mapParcelDestination', { fieldPrefix: 'destination', addressFieldName: 'destination', showGpsButton: false });
         }, 150);
-    }
-
-    static selectParcelDriver(conductorId) {
-        document.querySelectorAll('.driver-card').forEach(c => c.classList.remove('driver-card-selected'));
-        document.querySelector(`[data-conductor-id="${conductorId}"]`)?.classList.add('driver-card-selected');
-        document.getElementById('parcelSelectedConductor').value = conductorId;
-        document.getElementById('parcelSelectedRoute').value = '';
-
-        const conductor = UserPanel._parcelRoutesCache.find(r => r.sin_ruta && String(r.conductor_id) === String(conductorId));
-        const info = document.getElementById('parcelRouteInfo');
-        if (conductor) {
-            info.innerHTML = `<div class="alert alert-success" style="margin-top:8px">
-                <i class="fas fa-check-circle"></i>
-                Conductor seleccionado: <strong>${conductor.nombre_completo}</strong> · Indica abajo el origen y destino exactos.
-            </div>`;
-        }
-
-        document.getElementById('parcelOriginText')?.setAttribute('required', 'required');
-        document.getElementById('parcelDestinationText')?.setAttribute('required', 'required');
-
-        setTimeout(() => {
-            MapPicker.render('mapParcelOrigin', { fieldPrefix: 'origin', addressFieldName: 'origin' });
-            MapPicker.render('mapParcelDestination', { fieldPrefix: 'destination', addressFieldName: 'destination', showGpsButton: false });
-        }, 150);
-    }
-
-    static showParcelManualForm() {
-        openModal('<i class="fas fa-box"></i> Nueva Encomienda', `
-        <form id="parcelForm" onsubmit="UserPanel.saveParcel(event)">
-            <div class="form-group"><label>Descripción</label><textarea name="description" class="form-control" rows="2" required></textarea></div>
-            <div class="form-group">
-                <label><i class="fas fa-map-marker-alt" style="color:var(--primary)"></i> Origen</label>
-                <input type="text" name="origin" id="parcelOriginText" class="form-control" required placeholder="Dirección de recojo">
-                <div id="mapParcelOrigin" style="margin-top:8px"></div>
-            </div>
-            <div class="form-group">
-                <label><i class="fas fa-map-marker-alt" style="color:var(--danger)"></i> Destino</label>
-                <input type="text" name="destination" id="parcelDestinationText" class="form-control" required placeholder="Dirección de entrega">
-                <div id="mapParcelDestination" style="margin-top:8px"></div>
-            </div>
-            <div class="grid-2">
-                <div class="form-group"><label>Nombre receptor <span class="text-danger">*</span></label><input type="text" name="receiver_name" class="form-control" required></div>
-                <div class="form-group"><label>Contacto receptor</label><input type="tel" name="receiver_contact" class="form-control"></div>
-            </div>
-            <button type="submit" class="btn btn-primary btn-block"><i class="fas fa-paper-plane"></i> Crear Encomienda</button>
-        </form>`);
-        setTimeout(() => {
-            MapPicker.render('mapParcelOrigin', { fieldPrefix: 'origin', addressFieldName: 'origin' });
-            MapPicker.render('mapParcelDestination', { fieldPrefix: 'destination', addressFieldName: 'destination', showGpsButton: false });
-            MapPicker.attachQuickSearch(document.getElementById('parcelDestinationText'), { fieldPrefix: 'destination' });
-        }, 300);
     }
 
     static async saveParcel(event) {
         event.preventDefault();
         const form = event.target;
         const formData = getFormData(form);
-        if (!formData.route_id && !formData.origin) { showToast('Selecciona un conductor o ingresa el origen', 'error'); return; }
+        if (!formData.route_id) { showToast('Selecciona un conductor de la lista', 'error'); return; }
 
         try {
             showLoader();
@@ -454,9 +358,7 @@ class UserPanel {
             UserPanel.showWhatsAppConfirm(res.data, 'encomienda', {
                 descripcion: formData.description,
                 receptor: formData.receiver_name,
-                contacto_receptor: formData.receiver_contact,
-                ref_origen: formData.origin_reference,
-                ref_destino: formData.destination_reference
+                contacto_receptor: formData.receiver_contact
             });
         } catch(e) {
             hideLoader();
@@ -511,42 +413,27 @@ class UserPanel {
             const data = await apiCall('/route-config/routes/available');
             const rutas = data.data || [];
             document.getElementById('tripFormContainer').innerHTML = UserPanel.buildTripFormHTML(rutas);
-            MapPicker.attachQuickSearch(document.getElementById('tripDestinationText'), { fieldPrefix: 'destination' });
         } catch(e) {
             document.getElementById('tripFormContainer').innerHTML = `
-            <div class="alert alert-danger"><i class="fas fa-exclamation-circle"></i> No se pudieron cargar las rutas.</div>
-            <button class="btn btn-secondary btn-block" onclick="UserPanel.showTripManualForm()">Continuar sin ruta</button>`;
+            <div class="alert alert-danger"><i class="fas fa-exclamation-circle"></i> No se pudieron cargar los conductores disponibles. Intenta de nuevo en un momento.</div>`;
         }
     }
 
     static _tripRoutesCache = [];
 
     static buildTripFormHTML(rutas) {
-        UserPanel._tripRoutesCache = rutas;
-        if (!rutas.length) {
-            return `<div class="alert alert-info"><i class="fas fa-info-circle"></i> No hay conductores disponibles en este momento.</div>
-            <button class="btn btn-secondary btn-block" onclick="UserPanel.showTripManualForm()">Continuar con datos manuales</button>`;
+        // Igual que en encomiendas: solo conductores CON ruta fija, porque
+        // el destino ya no se busca ni se ajusta a mano — se toma directo
+        // de la ruta elegida (ej. Piura → Ayabaca).
+        const rutasConRuta = rutas.filter(r => !r.sin_ruta);
+        UserPanel._tripRoutesCache = rutasConRuta;
+
+        if (!rutasConRuta.length) {
+            return `<div class="alert alert-info"><i class="fas fa-info-circle"></i> No hay conductores disponibles en este momento. Intenta de nuevo más tarde.</div>`;
         }
 
-        const tarjetas = rutas.map(r => {
-            if (r.sin_ruta) {
-                return `
-                <div class="driver-card" data-conductor-id="${r.conductor_id}"
-                     onclick="UserPanel.selectTripDriver(${r.conductor_id})" style="cursor:pointer">
-                    <div class="driver-card-info">
-                        <div class="driver-card-name"><i class="fas fa-user-circle"></i> ${r.nombre_completo||'Conductor'}</div>
-                        <div class="driver-card-meta">
-                            <span><i class="fas fa-route"></i> Sin ruta fija — tú indicas origen y destino</span>
-                            ${r.placa ? `<span><i class="fas fa-car"></i> ${r.placa}${r.marca ? ' · '+r.marca : ''}</span>` : ''}
-                            ${r.capacidad_vehiculo ? `<span><i class="fas fa-users"></i> ${r.capacidad_vehiculo} asientos</span>` : ''}
-                        </div>
-                        <div class="driver-card-rating">${Ratings.renderStars(r.rating_promedio, r.rating_total)}</div>
-                    </div>
-                    <span class="badge badge-success"><i class="fas fa-circle"></i> Disponible</span>
-                </div>`;
-            }
-            return `
-            <div class="driver-card ${r.vehiculo_lleno ? 'driver-card-full' : ''}" data-route-id="${r.id}"
+        const tarjetas = rutasConRuta.map(r => `
+            <div class="driver-card ${r.vehiculo_lleno ? 'driver-card-full' : ''}" data-route-id="${r.id}" data-origen="${r.origen}"
                  onclick="${r.vehiculo_lleno ? '' : `UserPanel.selectTripRoute(${r.id})`}"
                  style="${r.vehiculo_lleno ? 'opacity:.55;cursor:not-allowed' : 'cursor:pointer'}">
                 <div class="driver-card-info">
@@ -568,17 +455,15 @@ class UserPanel {
                 ${r.vehiculo_lleno
                     ? `<span class="badge badge-danger"><i class="fas fa-ban"></i> Vehículo lleno</span>`
                     : `<span class="badge badge-success"><i class="fas fa-circle"></i> Disponible</span>`}
-            </div>`;
-        }).join('');
+            </div>`).join('');
 
         return `
         <form id="tripForm" onsubmit="UserPanel.saveTrip(event)">
             <input type="hidden" name="route_id" id="tripSelectedRoute">
-            <input type="hidden" name="conductor_id" id="tripSelectedConductor">
-            ${UserPanel.buildOriginDestinoSelector(rutas, 'trip')}
+            ${UserPanel.buildOriginOnlySelector(rutasConRuta, 'trip')}
             <div class="form-group">
                 <label><i class="fas fa-car"></i> Elige un conductor disponible</label>
-                <div class="driver-card-list">${tarjetas}</div>
+                <div class="driver-card-list" id="tripDriverList">${tarjetas}</div>
                 <div id="tripRouteInfo"></div>
             </div>
             <div id="tripScheduleContainer"></div>
@@ -593,29 +478,21 @@ class UserPanel {
                 <div id="mapTripOrigin" style="margin-top:8px"></div>
             </div>
 
-            <div class="form-group">
-                <label><i class="fas fa-map-marker-alt" style="color:var(--danger)"></i> Punto exacto de destino</label>
-                <input type="text" name="destination" id="tripDestinationText" class="form-control" placeholder="Dirección de destino...">
-                <div id="mapTripDestination" style="margin-top:8px"></div>
-            </div>
-
             <div class="form-group"><label>Notas para el conductor (opcional)</label><textarea name="notes" class="form-control" rows="2" placeholder="Equipaje especial, paradas, etc."></textarea></div>
             <button type="submit" class="btn btn-primary btn-block"><i class="fas fa-paper-plane"></i> Crear Viaje</button>
-        </form>
-        <div class="auth-link" style="margin-top:10px"><a href="#" onclick="UserPanel.showTripManualForm();return false;">Prefiero ingresar todo manualmente</a></div>`;
+        </form>`;
     }
 
     static selectTripRoute(routeId) {
         document.querySelectorAll('.driver-card').forEach(c => c.classList.remove('driver-card-selected'));
         document.querySelector(`[data-route-id="${routeId}"]`)?.classList.add('driver-card-selected');
         document.getElementById('tripSelectedRoute').value = routeId;
-        document.getElementById('tripSelectedConductor').value = '';
 
         const ruta = UserPanel._tripRoutesCache.find(r => String(r.id) === String(routeId));
         const info = document.getElementById('tripRouteInfo');
         if (ruta) {
             info.innerHTML = `<div class="alert alert-success" style="margin-top:8px">
-                <i class="fas fa-check-circle"></i> Conductor: <strong>${ruta.nombre_completo}</strong>
+                <i class="fas fa-check-circle"></i> Conductor: <strong>${ruta.nombre_completo}</strong> · Ruta: ${ruta.origen} → ${ruta.destino}
                 ${ruta.asientos_disponibles !== null ? ` · ${ruta.asientos_disponibles} asiento(s) disponible(s)` : ''}
             </div>`;
         }
@@ -631,64 +508,9 @@ class UserPanel {
             container.innerHTML = `<div class="form-group"><label>Hora de salida deseada</label>${TimePicker.render('departure_time_manual')}</div>`;
         }
 
-        document.getElementById('tripOriginText')?.removeAttribute('required');
-        document.getElementById('tripDestinationText')?.removeAttribute('required');
-
         setTimeout(() => {
             MapPicker.render('mapTripOrigin', { fieldPrefix: 'origin', addressFieldName: 'origin' });
-            MapPicker.render('mapTripDestination', { fieldPrefix: 'destination', addressFieldName: 'destination', showGpsButton: false });
         }, 150);
-    }
-
-    static selectTripDriver(conductorId) {
-        document.querySelectorAll('.driver-card').forEach(c => c.classList.remove('driver-card-selected'));
-        document.querySelector(`[data-conductor-id="${conductorId}"]`)?.classList.add('driver-card-selected');
-        document.getElementById('tripSelectedConductor').value = conductorId;
-        document.getElementById('tripSelectedRoute').value = '';
-
-        const conductor = UserPanel._tripRoutesCache.find(r => r.sin_ruta && String(r.conductor_id) === String(conductorId));
-        const info = document.getElementById('tripRouteInfo');
-        if (conductor) {
-            info.innerHTML = `<div class="alert alert-success" style="margin-top:8px">
-                <i class="fas fa-check-circle"></i> Conductor: <strong>${conductor.nombre_completo}</strong> · Indica abajo origen, destino y hora.
-            </div>`;
-        }
-
-        const container = document.getElementById('tripScheduleContainer');
-        container.innerHTML = `<div class="form-group"><label>Hora de salida deseada</label>${TimePicker.render('departure_time_manual')}</div>`;
-
-        document.getElementById('tripOriginText')?.setAttribute('required', 'required');
-        document.getElementById('tripDestinationText')?.setAttribute('required', 'required');
-
-        setTimeout(() => {
-            MapPicker.render('mapTripOrigin', { fieldPrefix: 'origin', addressFieldName: 'origin' });
-            MapPicker.render('mapTripDestination', { fieldPrefix: 'destination', addressFieldName: 'destination', showGpsButton: false });
-        }, 150);
-    }
-
-    static showTripManualForm() {
-        openModal('<i class="fas fa-route"></i> Nuevo Viaje', `
-        <form id="tripForm" onsubmit="UserPanel.saveTrip(event)">
-            <div class="form-group">
-                <label><i class="fas fa-map-marker-alt" style="color:var(--primary)"></i> Origen</label>
-                <input type="text" name="origin" class="form-control" required placeholder="Dirección de recojo">
-                <div id="mapTripOrigin" style="margin-top:8px"></div>
-            </div>
-            <div class="form-group">
-                <label><i class="fas fa-map-marker-alt" style="color:var(--danger)"></i> Destino</label>
-                <input type="text" name="destination" id="tripDestinationText" class="form-control" required placeholder="Dirección de destino">
-                <div id="mapTripDestination" style="margin-top:8px"></div>
-            </div>
-            <div class="form-group"><label>Hora de salida</label>${TimePicker.render('departure_time_manual')}</div>
-            <div class="form-group"><label>Pasajeros</label><input type="number" name="passenger_count" class="form-control" value="1" min="1"></div>
-            <div class="form-group"><label>Notas (opcional)</label><textarea name="notes" class="form-control" rows="2"></textarea></div>
-            <button type="submit" class="btn btn-primary btn-block"><i class="fas fa-paper-plane"></i> Crear Viaje</button>
-        </form>`);
-        setTimeout(() => {
-            MapPicker.render('mapTripOrigin', { fieldPrefix: 'origin', addressFieldName: 'origin' });
-            MapPicker.render('mapTripDestination', { fieldPrefix: 'destination', addressFieldName: 'destination', showGpsButton: false });
-            MapPicker.attachQuickSearch(document.getElementById('tripDestinationText'), { fieldPrefix: 'destination' });
-        }, 300);
     }
 
     static async saveTrip(event) {
@@ -701,8 +523,8 @@ class UserPanel {
         delete formData.departure_time_manual_minute;
         delete formData.departure_time_manual_period;
 
-        if (!formData.route_id && !formData.origin) { showToast('Selecciona un conductor o ingresa el origen','error'); return; }
-        if (!formData.route_id && !formData.departure_time) { showToast('Indica la hora de salida','error'); return; }
+        if (!formData.route_id) { showToast('Selecciona un conductor de la lista','error'); return; }
+        if (!formData.schedule_id && !formData.departure_time) { showToast('Indica la hora de salida','error'); return; }
 
         try {
             showLoader();
@@ -760,9 +582,7 @@ class UserPanel {
         }
 
         msgLines.push(`*Origen:* ${origen}${mapsOrigen ? `\n*Ubicación:* ${mapsOrigen}` : ''}`);
-        if (extras.ref_origen) msgLines.push(`   Ref. recojo: ${extras.ref_origen}`);
-        msgLines.push(`*Destino:* ${destino}${mapsDestino ? `\n*Ubicación:* ${mapsDestino}` : ''}`);
-        if (extras.ref_destino) msgLines.push(`   Ref. entrega: ${extras.ref_destino}`);
+        msgLines.push(`*Destino:* ${destino}`);
 
         const mensaje = msgLines.join('\n');
         const waUrl = whatsapp
