@@ -21,8 +21,8 @@ class OrderController {
                 }
             }
 
-            if (!description || !receiver_name) {
-                return res.status(400).json({ success: false, message: 'Faltan campos obligatorios' });
+            if (!description || !receiver_name || !receiver_contact) {
+                return res.status(400).json({ success: false, message: 'Faltan campos obligatorios: descripción, nombre y contacto de quien recibe' });
             }
 
             let origenFinal = origin;
