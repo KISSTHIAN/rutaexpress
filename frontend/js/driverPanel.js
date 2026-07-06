@@ -7,7 +7,7 @@ class DriverPanel {
         <div class="dashboard-layout">
             <div class="mobile-overlay" id="mobileOverlay" onclick="closeMobileSidebar()"></div>
             <aside class="sidebar" id="appSidebar">
-                <div class="sidebar-logo"><h3>🚀 Ruta Express</h3><span>Panel Conductor</span></div>
+                <div class="sidebar-logo"><h3>Ruta Express</h3><span>Panel Conductor</span></div>
                 <nav class="sidebar-nav">
                     <div class="sidebar-section-label">Principal</div>
                     <a href="#" class="active" onclick="DriverPanel.showSection('dashboard',event)"><i class="fas fa-home"></i> <span>Inicio</span></a>
@@ -79,9 +79,6 @@ class DriverPanel {
         const loads = { dashboard:DriverPanel.loadDashboardStats, profile:DriverPanel.loadProfile, vehicle:DriverPanel.loadVehicle, schedules:DriverPanel.loadSchedules, routes:DriverPanel.loadRoutes, orders:DriverPanel.loadOrders, history:DriverPanel.loadHistory, reviews:DriverPanel.loadReviews, subscription:DriverPanel.loadSubscription, settings:DriverPanel.loadSettings };
         if (loads[section]) setTimeout(loads[section], 200);
     }
-
-    // ============ DASHBOARD ============
-
     static getDashboardHTML() {
         return `
         <div id="subscriptionBannerDriver"></div>
@@ -428,10 +425,11 @@ class DriverPanel {
             document.getElementById('historyContent').innerHTML = `
             <div class="alert alert-success"><i class="fas fa-money-bill-wave"></i> Total estimado: <strong>${formatCurrency(total)}</strong></div>
             <div class="table-container"><table>
-                <thead><tr><th>Tipo</th><th>Ruta</th><th>Precio</th><th>Fecha</th></tr></thead>
+                <thead><tr><th>Tipo</th><th>Ruta</th><th>Pasajeros</th><th>Precio</th><th>Fecha</th></tr></thead>
                 <tbody>${pedidos.map(p=>`<tr>
-                    <td><span class="badge ${p.tipo_pedido==='encomienda'?'badge-primary':'badge-success'}">${p.tipo_pedido==='encomienda'?'📦 Encomienda':'🚗 Viaje'}</span></td>
+                    <td><span class="badge ${p.tipo_pedido==='encomienda'?'badge-primary':'badge-success'}">${p.tipo_pedido==='encomienda'?'Encomienda':'Viaje'}</span></td>
                     <td>${p.origen} → ${p.destino}</td>
+                    <td>${p.tipo_pedido==='viaje' ? (p.cantidad_pasajeros ?? '-') : '-'}</td>
                     <td>${formatCurrency(p.precio)}</td>
                     <td>${formatDateShort(p.fecha_culminacion)}</td>
                 </tr>`).join('')}</tbody>
@@ -511,4 +509,3 @@ class DriverPanel {
         } catch(e) { showToast(e.message,'error'); }
     }
 }
-
