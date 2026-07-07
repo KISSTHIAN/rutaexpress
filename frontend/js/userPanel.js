@@ -195,14 +195,6 @@ class UserPanel {
         } catch(e) { showToast('Error al cargar encomiendas','error'); }
     }
 
-    /**
-     * Buscador de ORIGEN (texto libre, no una lista fija): el cliente
-     * escribe el lugar de origen (ej. "Piura") y, por coincidencia de
-     * texto, se filtran las tarjetas de conductores que tienen ese origen
-     * en su ruta. Ya NO se pide destino por separado — el destino queda
-     * definido por la ruta de cada conductor (ej. Piura → Ayabaca) y se ve
-     * directamente en su tarjeta.
-     */
     static buildOriginOnlySelector(rutas, tipo) {
         if (!rutas.length) return '';
 
@@ -261,11 +253,7 @@ class UserPanel {
     static _parcelRoutesCache = [];
 
     static buildParcelFormHTML(rutas) {
-        // Solo interesan conductores CON ruta fija: el destino ya no se
-        // busca ni se ajusta a mano — se toma directo de la ruta elegida
-        // (ej. Piura → Ayabaca). Los conductores "sin ruta" necesitarían
-        // que el cliente escriba el destino manualmente, así que ya no se
-        // muestran aquí.
+
         const rutasConRuta = rutas.filter(r => !r.sin_ruta);
         UserPanel._parcelRoutesCache = rutasConRuta;
 
@@ -273,7 +261,6 @@ class UserPanel {
             return `<div class="alert alert-info"><i class="fas fa-info-circle"></i> No hay conductores disponibles en este momento. Intenta de nuevo más tarde.</div>`;
         }
 
-        // Tarjeta simplificada: solo nombre, ruta, placa y reseñas (estrellas).
         const tarjetas = rutasConRuta.map(r => `
             <div class="driver-card ${r.vehiculo_lleno ? 'driver-card-full' : ''}" data-route-id="${r.id}" data-origen="${r.origen}"
                  onclick="${r.vehiculo_lleno ? '' : `UserPanel.selectParcelRoute(${r.id})`}"
@@ -333,10 +320,6 @@ class UserPanel {
             </div>`;
         }
 
-        // El punto exacto de RECOJO sigue siendo útil (el conductor necesita
-        // saber dónde exactamente pasar por el paquete dentro de la ciudad
-        // de origen). El destino YA NO se pide: es directamente el de la
-        // ruta elegida (ej. Ayabaca), sin dirección ni mapa adicional.
         setTimeout(() => {
             MapPicker.render('mapParcelOrigin', { fieldPrefix: 'origin', addressFieldName: 'origin' });
         }, 150);
@@ -422,9 +405,7 @@ class UserPanel {
     static _tripRoutesCache = [];
 
     static buildTripFormHTML(rutas) {
-        // Igual que en encomiendas: solo conductores CON ruta fija, porque
-        // el destino ya no se busca ni se ajusta a mano — se toma directo
-        // de la ruta elegida (ej. Piura → Ayabaca).
+
         const rutasConRuta = rutas.filter(r => !r.sin_ruta);
         UserPanel._tripRoutesCache = rutasConRuta;
 
@@ -438,19 +419,23 @@ class UserPanel {
                  style="${r.vehiculo_lleno ? 'opacity:.55;cursor:not-allowed' : 'cursor:pointer'}">
                 <div class="driver-card-info">
                     <div class="driver-card-name"><i class="fas fa-user-circle"></i> ${r.nombre_completo||'Conductor'}</div>
-                    <div class="driver-card-meta">
+                    <div class="driver-card-row">
                         <span><i class="fas fa-map-marker-alt"></i> ${r.origen} → ${r.destino}</span>
                         <span><i class="fas fa-tag"></i> S/ ${parseFloat(r.precio).toFixed(2)}/pasajero</span>
-                        ${r.placa ? `<span><i class="fas fa-car"></i> ${r.placa}${r.marca ? ' · '+r.marca : ''}</span>` : ''}
+                    </div>
+                    <div class="driver-card-row">
+                        ${r.placa ? `<span><i class="fas fa-car"></i> ${r.placa}${r.marca ? ' · '+r.marca : ''}</span>` : '<span></span>'}
                         ${r.capacidad_vehiculo
-                            ? `<span><i class="fas fa-users"></i>
-                               <strong>${r.asientos_disponibles}</strong> de ${r.capacidad_vehiculo} asientos libres</span>`
-                            : ''}
-                        ${r.horarios && r.horarios.length
-                            ? `<span><i class="fas fa-clock"></i> ${r.horarios.map(h=>formatTime12h(h.hora_salida)).join(' · ')}</span>`
+                            ? `<span><i class="fas fa-users"></i> <strong>${r.asientos_disponibles}</strong> de ${r.capacidad_vehiculo} asientos libres</span>`
                             : ''}
                     </div>
-                    <div class="driver-card-rating">${Ratings.renderStars(r.rating_promedio, r.rating_total)}</div>
+                    ${r.horarios && r.horarios.length ? `
+                    <div class="driver-card-row">
+                        <span><i class="fas fa-clock"></i> ${r.horarios.map(h=>formatTime12h(h.hora_salida)).join(' · ')}</span>
+                    </div>` : ''}
+                    <div class="driver-card-row">
+                        <div class="driver-card-rating">${Ratings.renderStars(r.rating_promedio, r.rating_total)}</div>
+                    </div>
                 </div>
                 ${r.vehiculo_lleno
                     ? `<span class="badge badge-danger"><i class="fas fa-ban"></i> Vehículo lleno</span>`
