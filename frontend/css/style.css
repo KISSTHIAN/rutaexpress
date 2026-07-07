@@ -793,7 +793,8 @@ tbody tr:hover { background: var(--primary-50); }
 }
 .mobile-overlay.active { display: block; }
 
-
+/* Hacer que cualquier tabla generada por JS pueda desplazarse en horizontal
+   sin romper el layout, en vez de desbordar la pantalla en móvil */
 .section-content-wrapper table { display: block; overflow-x: auto; white-space: nowrap; }
 .section-content-wrapper thead, .section-content-wrapper tbody, .section-content-wrapper tr { display: table; width: 100%; table-layout: fixed; }
 
@@ -868,6 +869,9 @@ tbody tr:hover { background: var(--primary-50); }
     .stats-grid { grid-template-columns: 1fr; }
     .auth-form-wrapper { padding: 24px 18px; }
 }
+/* ============================================================
+   RUTA EXPRESS v4 — Estilos adicionales
+   ============================================================ */
 
 /* ---- Tarjetas de conductor disponible ---- */
 .driver-card-list { display: flex; flex-direction: column; gap: 10px; margin-bottom: 16px; }
@@ -883,6 +887,17 @@ tbody tr:hover { background: var(--primary-50); }
 .driver-card-name { font-weight: 700; margin-bottom: 4px; }
 .driver-card-meta { display: flex; flex-wrap: wrap; gap: 8px; font-size: 13px; color: var(--text-muted); margin-bottom: 6px; }
 .driver-card-meta span { display: flex; align-items: center; gap: 4px; }
+.driver-card-row {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: space-between;
+    align-items: center;
+    gap: 8px;
+    font-size: 13px;
+    color: var(--text-muted);
+    margin-bottom: 4px;
+}
+.driver-card-row span { display: flex; align-items: center; gap: 4px; }
 .driver-card-rating { display: flex; align-items: center; gap: 6px; font-size: 13px; }
 
 /* ---- Badges ---- */
