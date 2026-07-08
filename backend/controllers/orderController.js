@@ -294,10 +294,24 @@ class OrderController {
 
                 const capacidad = vehiculoRuta?.capacidad ? parseInt(vehiculoRuta.capacidad, 10) : null;
                 if (capacidad !== null) {
+                    // Igual que en routeConfigController: los asientos se
+                    // cuentan por CONDUCTOR (su vehículo), no por ruta
+                    // individual — es el mismo vehículo físico sin importar
+                    // a cuál de sus rutas configuradas pertenezca cada
+                    // reserva. Primero se buscan TODAS las rutas activas de
+                    // este conductor, y luego se suman los pasajeros
+                    // reservados en cualquiera de ellas.
+                    const { data: rutasConductor } = await supabase
+                        .from('configuracion_rutas')
+                        .select('id')
+                        .eq('conductor_id', ruta.conductor_id);
+
+                    const idsRutasConductor = (rutasConductor || []).map(r => r.id);
+
                     const { data: viajesActivos, error: viajesError } = await supabase
                         .from('viajes')
                         .select('cantidad_pasajeros')
-                        .eq('ruta_config_id', route_id)
+                        .in('ruta_config_id', idsRutasConductor)
                         .eq('estado', 'en_proceso');
 
                     if (!viajesError) {
