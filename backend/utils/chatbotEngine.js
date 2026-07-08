@@ -2,12 +2,50 @@ const { supabase } = require('../models/init');
 const faqs = require('../data/chatbotFaqs');
 
 const RESPUESTA_DEFECTO = 'No estoy seguro de cómo ayudarte con eso. Puedo responder sobre encomiendas, viajes, la suscripción mensual, calificaciones, cómo ser conductor y ajustes de tu cuenta.';
+const STOPWORDS = new Set([
+    'de','la','el','los','las','un','una','unos','unas','que','como','para',
+    'por','en','a','y','o','mi','tu','su','me','te','se','del','al','es',
+    'con','sin','lo','le','ya'
+]);
 
+// Quita tildes y pasa a minúsculas para que "dónde" y "donde" coincidan igual.
 function normalizar(texto) {
     return String(texto || '')
         .toLowerCase()
         .normalize('NFD')
         .replace(/[\u0300-\u036f]/g, '');
+}
+
+// Separa un texto en palabras sueltas, ya normalizado.
+function tokenizar(texto) {
+    return normalizar(texto).split(/[^a-z0-9ñ]+/).filter(Boolean);
+}
+
+// Recorte simple de plural, para que "asiento"/"asientos",
+// "encomienda"/"encomiendas" cuenten como la misma palabra.
+function raiz(palabra) {
+    if (palabra.length > 4 && palabra.endsWith('es')) return palabra.slice(0, -2);
+    if (palabra.length > 3 && palabra.endsWith('s')) return palabra.slice(0, -1);
+    return palabra;
+}
+
+function palabrasSignificativas(texto) {
+    return tokenizar(texto).map(raiz).filter(p => !STOPWORDS.has(p));
+}
+
+function palabraSimilar(a, b) {
+    if (a === b) return true;
+    const minLargo = Math.min(a.length, b.length);
+    if (minLargo < 4) return false;
+    const prefijo = Math.min(4, minLargo);
+    return a.slice(0, prefijo) === b.slice(0, prefijo);
+}
+
+function algunaCoincide(palabraClave, palabrasMensaje) {
+    for (const p of palabrasMensaje) {
+        if (palabraSimilar(palabraClave, p)) return true;
+    }
+    return false;
 }
 
 function normalizarRol(rol) {
@@ -18,7 +56,7 @@ function normalizarRol(rol) {
 }
 
 function buscarMejorCoincidencia(mensajeUsuario, rol) {
-    const mensajeNormalizado = normalizar(mensajeUsuario);
+    const palabrasMensaje = palabrasSignificativas(mensajeUsuario);
     let mejor = null;
     let mejorPuntaje = 0;
     let mejorEsDeSuRol = false;
@@ -26,7 +64,10 @@ function buscarMejorCoincidencia(mensajeUsuario, rol) {
     for (const faq of faqs) {
         let puntaje = 0;
         for (const clave of faq.palabras_clave) {
-            if (mensajeNormalizado.includes(normalizar(clave))) puntaje++;
+            const palabrasClave = palabrasSignificativas(clave);
+            if (palabrasClave.length === 0) continue;
+            const todasPresentes = palabrasClave.every(p => algunaCoincide(p, palabrasMensaje));
+            if (todasPresentes) puntaje += palabrasClave.length;
         }
         if (puntaje === 0) continue;
 
@@ -58,7 +99,7 @@ async function manejarSeguimientoPedido(usuarioId) {
 async function preguntarAGrok(mensajeUsuario, rol) {
     const apiKey = process.env.GROK_API_KEY;
     if (!apiKey) return null;
-    
+
     const contextoRol = rol === 'conductor'
         ? `Le estás hablando a un CONDUCTOR de Ruta Express. Como conductor puede: configurar su vehículo (Mi Vehículo), crear hasta 8 rutas fijas con precio (Rutas), definir horarios de salida (Horarios), ver y culminar los pedidos que le asignen (Pedidos), ver su historial de ganancias y pasajeros transportados (Historial), ver sus reseñas (Mis Reseñas), pagar su suscripción mensual de S/25 (Suscripción) y activarse/desactivarse con el switch "Disponible". NO le hables de cómo crear encomiendas o viajes como si fuera cliente.`
         : rol === 'cliente'
