@@ -117,6 +117,15 @@ class RouteConfigController {
 
     static async obtenerRutasDisponibles(req, res) {
         try {
+            // NOTA IMPORTANTE: "vehiculos" NO tiene una relación directa
+            // (foreign key) con "configuracion_rutas" en la base de datos —
+            // solo está relacionada con "conductores" (vehiculos.conductor_id
+            // → conductores.id). Pedirle a Supabase/PostgREST que la incluya
+            // aquí como si estuvieran conectadas directamente hacía que la
+            // consulta fallara con error 500 ("no se pudo encontrar la
+            // relación entre configuracion_rutas y vehiculos"), que es
+            // exactamente el error que estabas viendo. Por eso el vehículo
+            // se trae por separado más abajo, usando el id del conductor.
             const { data, error } = await supabase
                 .from('configuracion_rutas')
                 .select(`
@@ -145,6 +154,9 @@ class RouteConfigController {
 
             const conductorIds = [...new Set(rutasFiltradas.map(r => r.conductores?.id).filter(Boolean))];
 
+            // Vehículo de cada conductor (una sola consulta para todos).
+            // Se asume un vehículo por conductor; si tuviera varios, se usa
+            // el primero encontrado.
             let vehiculoPorConductorId = {};
             if (conductorIds.length > 0) {
                 const { data: vehiculosData, error: vehError } = await supabase
@@ -177,18 +189,29 @@ class RouteConfigController {
             }
 
             const rutaIds = rutasFiltradas.map(r => r.id);
-            let ocupadosPorRuta = {};
+            let ocupadosPorConductor = {};
             if (rutaIds.length > 0) {
+                // IMPORTANTE: los asientos se cuentan por CONDUCTOR (su
+                // vehículo), no por ruta individual. Un conductor puede
+                // tener varias rutas configuradas (ej. Piura→Jilili y
+                // Piura→Sicchez), pero es el MISMO vehículo físico con una
+                // sola capacidad total. Si reserva 2 pasajeros en una de
+                // sus rutas, esos 2 asientos ya no están disponibles en
+                // NINGUNA de sus otras rutas — por eso se suman todos los
+                // pasajeros activos del conductor sin importar en cuál de
+                // sus rutas fueron reservados, y ese total se resta por
+                // igual en todas las rutas que ofrece.
                 const { data: viajesActivos, error: viajesError } = await supabase
                     .from('viajes')
-                    .select('ruta_config_id, cantidad_pasajeros')
+                    .select('ruta_config_id, cantidad_pasajeros, configuracion_rutas!inner(conductor_id)')
                     .in('ruta_config_id', rutaIds)
                     .eq('estado', 'en_proceso');
 
                 if (!viajesError && viajesActivos) {
-                    ocupadosPorRuta = viajesActivos.reduce((acc, v) => {
+                    ocupadosPorConductor = viajesActivos.reduce((acc, v) => {
                         const cant = parseInt(v.cantidad_pasajeros, 10) || 0;
-                        acc[v.ruta_config_id] = (acc[v.ruta_config_id] || 0) + cant;
+                        const conductorId = v.configuracion_rutas?.conductor_id;
+                        if (conductorId) acc[conductorId] = (acc[conductorId] || 0) + cant;
                         return acc;
                     }, {});
                 }
@@ -220,7 +243,7 @@ class RouteConfigController {
             const rutasFormateadas = rutasFiltradas.map(r => {
                 const v = vehiculoPorConductorId[r.conductores?.id] || {};
                 const capacidad = v.capacidad ? parseInt(v.capacidad, 10) : null;
-                const ocupados = ocupadosPorRuta[r.id] || 0;
+                const ocupados = ocupadosPorConductor[r.conductores?.id] || 0;
                 const disponibles = capacidad !== null ? Math.max(0, capacidad - ocupados) : null;
                 const rating = ratingPorConductor[r.conductores?.id] || { promedio: 0, total: 0 };
 
