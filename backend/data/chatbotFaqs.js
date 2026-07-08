@@ -49,19 +49,16 @@ module.exports = [
         respuesta: 'Por ahora no contamos con soporte humano integrado en la aplicación. Si tu consulta no se resuelve aquí, intenta describirla con otras palabras o contacta directamente al conductor asignado a tu pedido.'
     },
 
-    // ============================================================
-    // SOLO CLIENTES
-    // ============================================================
     {
         id: 'como_enviar_encomienda',
         rol: 'cliente',
-        palabras_clave: ['como envio', 'enviar un paquete', 'mandar una encomienda', 'crear encomienda', 'enviar encomienda', 'nueva encomienda'],
+        palabras_clave: ['como envio', 'enviar un paquete', 'mandar una encomienda', 'crear encomienda', 'enviar encomienda', 'nueva encomienda', 'creo una encomienda'],
         respuesta: 'Ve a "Encomiendas" → "Nueva Encomienda". Escribe el lugar de origen (ej: Piura) para ver los conductores que salen desde ahí, elige uno, indica el punto exacto de recojo (puedes usar tu ubicación actual o el mapa) y completa los datos de quien recibe el paquete — el nombre y el contacto de esa persona son obligatorios.'
     },
     {
         id: 'como_pedir_viaje',
         rol: 'cliente',
-        palabras_clave: ['como pido un viaje', 'reservar viaje', 'crear viaje', 'pedir transporte', 'como viajo', 'reservar pasaje', 'nuevo viaje'],
+        palabras_clave: ['como pido un viaje', 'reservar viaje', 'crear viaje', 'pedir transporte', 'como viajo', 'reservar pasaje', 'nuevo viaje', 'creo un viaje', 'quiero viajar'],
         respuesta: 'Ve a "Viajes" → "Nuevo Viaje". Escribe el lugar de origen para ver los conductores que salen desde ahí (con su ruta, precio, placa, asientos disponibles y horarios), elige uno, indica cuántos pasajeros son y el punto exacto de recojo.'
     },
     {
@@ -91,7 +88,7 @@ module.exports = [
     {
         id: 'cancelar_pedido',
         rol: 'cliente',
-        palabras_clave: ['cancelar', 'eliminar mi pedido', 'anular encomienda', 'anular viaje'],
+        palabras_clave: ['cancelar', 'eliminar mi pedido', 'anular encomienda', 'anular viaje', 'cancelar encomienda', 'cancelar viaje', 'cancelar pedido'],
         respuesta: 'Puedes eliminar una encomienda o viaje desde "Mis Pedidos" siempre que todavía no tenga un conductor asignado y siga en proceso.'
     },
     {
@@ -113,9 +110,6 @@ module.exports = [
         respuesta: 'El pago de cada encomienda o viaje se coordina directamente con el conductor (por ejemplo Yape, Plin o efectivo); la app no procesa ese cobro.'
     },
 
-    // ============================================================
-    // SOLO CONDUCTORES
-    // ============================================================
     {
         id: 'ser_conductor',
         rol: 'ambos',
