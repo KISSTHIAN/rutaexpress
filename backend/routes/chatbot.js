@@ -3,9 +3,6 @@ const router = express.Router();
 const { optionalAuth } = require('../middleware/auth');
 const { responder } = require('../utils/chatbotEngine');
 
-// No requiere estar logueado (para que alguien pueda preguntar "cómo me
-// registro" antes de tener cuenta), pero si hay token válido lo usamos
-// para responder con datos reales en preguntas de seguimiento de pedido.
 router.post('/message', optionalAuth, async (req, res) => {
     try {
         const { message } = req.body;
@@ -15,7 +12,8 @@ router.post('/message', optionalAuth, async (req, res) => {
         }
 
         const usuarioId = req.user ? req.user.id : null;
-        const resultado = await responder(message, usuarioId);
+        const rol = req.user ? (req.user.rol || req.user.role) : null;
+        const resultado = await responder(message, usuarioId, rol);
 
         res.json({ success: true, data: resultado });
     } catch (error) {
