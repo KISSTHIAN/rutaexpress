@@ -1,9 +1,8 @@
 const { supabase } = require('../models/init');
+const { crearNotificacion } = require('../utils/notifications');
 
 class RatingController {
 
-    // El usuario califica al conductor de un pedido ya culminado.
-    // Solo se puede calificar una vez por pedido (UNIQUE en la BD).
     static async calificar(req, res) {
         try {
             const { tipo_pedido, pedido_id, estrellas, comentario } = req.body;
@@ -18,8 +17,6 @@ class RatingController {
 
             const tabla = tipo_pedido === 'encomienda' ? 'encomiendas' : 'viajes';
 
-            // Verificar que el pedido es del usuario logueado, está culminado,
-            // y tiene un conductor asignado.
             const { data: pedido, error: findError } = await supabase
                 .from(tabla)
                 .select('id, usuario_id, conductor_id, estado')
@@ -49,12 +46,24 @@ class RatingController {
                 }]);
 
             if (insertError) {
-                // Violación de UNIQUE = ya fue calificado antes
                 if (insertError.code === '23505') {
                     return res.status(400).json({ success: false, message: 'Ya calificaste este pedido' });
                 }
                 return res.status(500).json({ success: false, message: insertError.message });
             }
+
+            supabase.from('conductores').select('usuario_id').eq('id', pedido.conductor_id).single()
+                .then(({ data: conductor }) => {
+                    if (conductor?.usuario_id) {
+                        crearNotificacion(
+                            conductor.usuario_id,
+                            'nueva_calificacion',
+                            'Tienes una nueva calificación',
+                            `Un cliente te calificó con ${estrellasNum} estrella${estrellasNum>1?'s':''}${comentario ? `: "${comentario}"` : '.'}`,
+                            { tipo: tipo_pedido, id: pedido_id }
+                        );
+                    }
+                });
 
             res.status(201).json({ success: true, message: '¡Gracias por tu calificación!' });
         } catch (error) {
@@ -62,8 +71,6 @@ class RatingController {
         }
     }
 
-    // Verifica si un pedido específico ya fue calificado (para que el
-    // frontend sepa si debe mostrar el formulario de calificación o no).
     static async verificarCalificado(req, res) {
         try {
             const { tipo_pedido, pedido_id } = req.params;
@@ -84,9 +91,6 @@ class RatingController {
         }
     }
 
-    // Calificación promedio y total de reseñas de un conductor. Se usa
-    // tanto en el panel del conductor (sus propias estadísticas) como
-    // en las tarjetas de "conductores disponibles" que ve el usuario.
     static async obtenerResumenConductor(req, res) {
         try {
             const conductorId = req.params.conductorId;
