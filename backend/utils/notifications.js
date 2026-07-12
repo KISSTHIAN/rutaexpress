@@ -1,4 +1,6 @@
 const { supabase } = require('../models/init');
+const { enviarCorreoNotificacion } = require('./emailSender');
+
 async function crearNotificacion(usuarioId, tipo, titulo, mensaje, referencia = null) {
     try {
         if (!usuarioId) return;
@@ -10,6 +12,16 @@ async function crearNotificacion(usuarioId, tipo, titulo, mensaje, referencia = 
             referencia_tipo: referencia?.tipo || null,
             referencia_id: referencia?.id || null
         }]);
+
+        const { data: usuario } = await supabase
+            .from('usuarios')
+            .select('correo')
+            .eq('id', usuarioId)
+            .single();
+
+        if (usuario?.correo) {
+            enviarCorreoNotificacion(usuario.correo, titulo, mensaje);
+        }
     } catch (error) {
         console.error('⚠️ No se pudo crear la notificación (no crítico):', error.message);
     }
